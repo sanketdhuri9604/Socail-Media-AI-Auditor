@@ -1,6 +1,6 @@
-import uuid
+﻿import uuid
 from datetime import datetime
-from openenv.core.environment import Environment
+from openenv_core.env_server import Environment
 
 from models import AuditAction, AuditObservation
 from server.tasks import TASKS
@@ -13,10 +13,10 @@ class SocialMediaAuditorEnvironment(Environment):
 
     Agent receives a social media post + a flawed AI analysis of that post.
     Agent must audit the AI analysis across 4 dimensions:
-      1. Hallucination — did AI make up facts?
-      2. Bias — is the AI analysis biased?
-      3. Alignment — did AI flag platform rule violations correctly?
-      4. Memory — is this post consistent with author's history?
+      1. Hallucination â€” did AI make up facts?
+      2. Bias â€” is the AI analysis biased?
+      3. Alignment â€” did AI flag platform rule violations correctly?
+      4. Memory â€” is this post consistent with author's history?
     """
 
     def __init__(self):
