@@ -25,7 +25,7 @@ class SocialMediaAuditorEnvironment(Environment):
         self.started_at = datetime.utcnow().isoformat()
         self.current_task_key = self.task_order[self.task_index]
         return self._build_observation()
-    def step(self, action: AuditAction) -> tuple:
+    def step(self, action: AuditAction) -> AuditObservation:
         if self.done:
             raise RuntimeError("Episode done. Call reset() to start a new episode.")
         task = TASKS[self.current_task_key]
@@ -41,15 +41,10 @@ class SocialMediaAuditorEnvironment(Environment):
         self.task_index += 1
         if self.task_index >= len(self.task_order):
             self.done = True
-            obs = self._build_observation(final=True)
+            return self._build_observation(final=True)
         else:
             self.current_task_key = self.task_order[self.task_index]
-            obs = self._build_observation()
-        info = {
-            "breakdown": result["breakdown"],
-            "total_reward_so_far": round(self.total_reward, 3),
-        }
-        return obs, reward, self.done, info
+            return self._build_observation()
     @property
     def state(self) -> dict:
         return {
