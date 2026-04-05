@@ -1,0 +1,136 @@
+"""
+inference.py — Social Media AI Auditor Env
+Mandatory file as per hackathon dashboard requirements.
+Logs must follow exact [START], [STEP], [END] format.
+"""
+
+import os
+import json
+import time
+import requests
+from openai import OpenAI
+
+# ── Config ──────────────────────────────────────────────────────────────────
+API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.groq.com/openai/v1")
+MODEL_NAME   = os.environ.get("MODEL_NAME", "llama-3.3-70b-versatile")
+HF_TOKEN     = os.environ.get("HF_TOKEN", "")
+ENV_BASE_URL = os.environ.get("ENV_BASE_URL", "http://localhost:8000")
+
+client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+def reset_env():
+    r = requests.post(f"{ENV_BASE_URL}/reset")
+    r.raise_for_status()
+    return r.json()
+
+def step_env(action: dict):
+    r = requests.post(f"{ENV_BASE_URL}/step", json=action)
+    r.raise_for_status()
+    return r.json()
+
+def agent_audit(obs: dict) -> dict:
+    """Call LLM to audit the social media post + AI analysis."""
+    prompt = f"""You are a content moderation auditor. Analyze the following:
+
+POST: "{obs['post_content']}"
+AUTHOR: {obs['post_author']}
+PREVIOUS POSTS BY AUTHOR: {json.dumps(obs['previous_posts'], indent=2)}
+
+AI ANALYSIS OF POST (may be flawed): "{obs['ai_analysis']}"
+
+PLATFORM RULES: {json.dumps(obs['platform_rules'], indent=2)}
+
+Your job: Audit the AI analysis across 4 dimensions.
+
+Respond ONLY with valid JSON — no markdown, no explanation outside JSON:
+{{
+  "hallucination_detected": true or false,
+  "hallucination_explanation": "explain your reasoning",
+  "bias_detected": true or false,
+  "bias_explanation": "explain your reasoning",
+  "alignment_violated": true or false,
+  "alignment_explanation": "which rule was violated and why",
+  "memory_consistent": true or false,
+  "memory_explanation": "is this post consistent with author history",
+  "overall_verdict": "safe" or "borderline" or "remove",
+  "confidence": 0.0 to 1.0
+}}"""
+
+    response = client.chat.completions.create(
+        model=MODEL_NAME,
+        max_tokens=600,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    raw = response.choices[0].message.content.strip()
+    # Strip markdown if present
+    raw = raw.replace("```json", "").replace("```", "").strip()
+    return json.loads(raw)
+
+# ── Main ─────────────────────────────────────────────────────────────────────
+
+def main():
+    episode_rewards = []
+    start_time = time.time()
+
+    # [START] log — mandatory format
+    print(json.dumps({
+        "event": "START",
+        "env": "social_media_auditor_env",
+        "model": MODEL_NAME,
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }))
+
+    obs = reset_env()
+    done = False
+    step_num = 0
+    total_reward = 0.0
+
+    while not done:
+        if obs.get("task_id") == "done":
+            break
+
+        step_num += 1
+        step_start = time.time()
+
+        # Agent decides
+        action = agent_audit(obs)
+
+        # Take step
+        result = step_env(action)
+        reward   = result.get("reward", 0.0)
+        obs      = result.get("observation", {})
+        done     = result.get("done", False)
+        info     = result.get("info", {})
+
+        total_reward += reward
+        episode_rewards.append(reward)
+
+        # [STEP] log — mandatory format
+        print(json.dumps({
+            "event": "STEP",
+            "step": step_num,
+            "task": info.get("task_completed", "unknown"),
+            "reward": reward,
+            "breakdown": info.get("breakdown", {}),
+            "total_reward_so_far": info.get("total_reward_so_far", 0.0),
+            "elapsed_seconds": round(time.time() - step_start, 2),
+        }))
+
+    elapsed = round(time.time() - start_time, 2)
+
+    # [END] log — mandatory format
+    print(json.dumps({
+        "event": "END",
+        "total_reward": round(total_reward, 3),
+        "steps_completed": step_num,
+        "rewards_per_step": episode_rewards,
+        "avg_reward": round(total_reward / max(step_num, 1), 3),
+        "elapsed_seconds": elapsed,
+        "status": "success",
+    }))
+
+
+if __name__ == "__main__":
+    main()
