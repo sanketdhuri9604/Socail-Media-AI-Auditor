@@ -8,7 +8,7 @@ class SocialMediaAuditorEnvironment(Environment):
     def __init__(self):
         self.episode_id = None
         self.step_count = 0
-        self.current_task_key = None
+        self.current_task_key = "easy"
         self.task_order = ["easy", "medium", "hard"]
         self.task_index = 0
         self.total_reward = 0.0
