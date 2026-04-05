@@ -75,7 +75,7 @@ class SocialMediaAuditorEnvironment(Environment):
 
         return obs, reward, self.done, info
 
-    def state(self) -> dict:
+    @property`n    def state(self) -> dict:
         return {
             "episode_id": self.episode_id,
             "step_count": self.step_count,
