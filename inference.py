@@ -306,8 +306,32 @@ Respond ONLY with valid JSON, no markdown, no text outside JSON:
         }]
     )
 
+
+    import re
     raw = raw.replace("```json", "").replace("```", "").strip()
-    result = json.loads(raw)
+    # Fix invalid backslash escapes that models produce inside JSON strings
+    # Replace any backslash NOT followed by valid JSON escape chars
+    def fix_json_escapes(s):
+        result_chars = []
+        i = 0
+        while i < len(s):
+            if s[i] == chr(92) and i + 1 < len(s):
+                next_c = s[i + 1]
+                if next_c in '"' or next_c in '\\/bfnrtu':
+                    result_chars.append(s[i])
+                    result_chars.append(next_c)
+                    i += 2
+                else:
+                    # Invalid escape — just skip the backslash
+                    i += 1
+            else:
+                result_chars.append(s[i])
+                i += 1
+        return "".join(result_chars)
+    try:
+        result = json.loads(raw)
+    except Exception:
+        result = json.loads(fix_json_escapes(raw))
 
     # Dynamic confidence capping to avoid overconfidence penalty
     issues = sum([
