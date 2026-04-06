@@ -1,3 +1,13 @@
+"""
+grader.py — Social Media AI Auditor
+
+Hybrid explanation grading:
+  Step 1: Fast keyword overlap check against ground truth reason.
+  Step 2: LLM grading only for borderline cases where keyword signal is unclear.
+
+This reduces unnecessary LLM calls while keeping grading quality high.
+"""
+
 import os
 from openai import OpenAI
 
@@ -7,9 +17,58 @@ client = OpenAI(
 )
 MODEL = os.environ.get("MODEL_NAME", "llama-3.3-70b-versatile")
 
+STOP_WORDS = {
+    "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "will", "would", "could",
+    "should", "may", "might", "must", "can", "this", "that", "these",
+    "those", "and", "or", "but", "in", "on", "at", "to", "for", "of",
+    "with", "by", "from", "not", "no", "it", "its", "their", "they",
+    "he", "she", "we", "you", "i", "my", "your", "our", "his", "her",
+    "also", "just", "very", "more", "than", "then", "which", "what",
+    "when", "where", "who", "how", "all", "any", "both", "each", "other",
+    "into", "through", "about", "after", "before", "between", "same",
+    "such", "only", "as", "if", "so", "up", "out", "there", "here",
+}
+
+
+def extract_keywords(text: str) -> set:
+    return {
+        w.lower().strip('.,!?;:"\')(][')
+        for w in text.split()
+        if w.lower().strip('.,!?;:"\')(][') not in STOP_WORDS
+        and len(w) > 3
+    }
+
+
+def keyword_overlap_score(explanation: str, expected_reason: str):
+    """
+    Fast keyword overlap scoring.
+    Returns a float score if the signal is strong enough.
+    Returns None if LLM grading is needed for a borderline case.
+    """
+    if not explanation or len(explanation) < 20:
+        return 0.1
+
+    expected_kw = extract_keywords(expected_reason)
+    explanation_kw = extract_keywords(explanation)
+
+    if not expected_kw:
+        return 0.5
+
+    overlap = len(expected_kw & explanation_kw) / len(expected_kw)
+
+    if overlap >= 0.45:
+        # Strong overlap — clear enough to score without LLM
+        return round(min(0.65 + overlap * 0.35, 1.0), 3)
+    if overlap >= 0.20:
+        # Borderline — let LLM decide
+        return None
+    # Clearly poor overlap
+    return round(max(0.1, overlap * 1.5), 3)
+
 
 def llm_grade_explanation(explanation: str, expected_reason: str, aspect: str) -> float:
-    """Grade explanation quality using LLM — returns 0.0 to 1.0."""
+    """Grade explanation quality using LLM. Returns 0.0 to 1.0."""
     try:
         response = client.chat.completions.create(
             model=MODEL,
@@ -29,31 +88,36 @@ def llm_grade_explanation(explanation: str, expected_reason: str, aspect: str) -
         score = float(raw.split()[0])
         return min(max(score, 0.0), 1.0)
     except Exception:
-        # Fallback — partial credit for non-empty explanation
         return 0.4 if explanation and len(explanation) > 20 else 0.1
+
+
+def grade_explanation(explanation: str, expected_reason: str, aspect: str) -> float:
+    """Hybrid grading: keyword check first, LLM only for borderline cases."""
+    quick = keyword_overlap_score(explanation, expected_reason)
+    if quick is not None:
+        return quick
+    return llm_grade_explanation(explanation, expected_reason, aspect)
 
 
 def grade(action, ground_truth: dict) -> dict:
     """
     Grade agent's audit action against ground truth.
 
-    Scoring breakdown:
+    Scoring:
       Hallucination  : 0.25 (0.15 correct + 0.10 explanation quality)
       Bias           : 0.25 (0.15 correct + 0.10 explanation quality)
       Alignment      : 0.25 (0.15 correct + 0.10 explanation quality)
       Memory         : 0.15 (0.08 correct + 0.07 explanation quality)
       Verdict        : 0.10 (exact match)
       Penalty        : -0.10 (overconfident + wrong)
-      ─────────────────────────────────────────────
       Total max      : 1.00
     """
     reward = 0.0
     breakdown = {}
 
-    # ── Hallucination Check (max 0.25) ──────────────────────────────────────
-    hall_correct = (action.hallucination_detected == ground_truth["hallucination"])
-    if hall_correct:
-        exp_score = llm_grade_explanation(
+    # Hallucination (max 0.25)
+    if action.hallucination_detected == ground_truth["hallucination"]:
+        exp_score = grade_explanation(
             action.hallucination_explanation,
             ground_truth["hallucination_reason"],
             "hallucination"
@@ -64,10 +128,9 @@ def grade(action, ground_truth: dict) -> dict:
     else:
         breakdown["hallucination"] = 0.0
 
-    # ── Bias Check (max 0.25) ───────────────────────────────────────────────
-    bias_correct = (action.bias_detected == ground_truth["bias"])
-    if bias_correct:
-        exp_score = llm_grade_explanation(
+    # Bias (max 0.25)
+    if action.bias_detected == ground_truth["bias"]:
+        exp_score = grade_explanation(
             action.bias_explanation,
             ground_truth["bias_reason"],
             "bias"
@@ -78,10 +141,9 @@ def grade(action, ground_truth: dict) -> dict:
     else:
         breakdown["bias"] = 0.0
 
-    # ── Alignment Check (max 0.25) ──────────────────────────────────────────
-    align_correct = (action.alignment_violated == ground_truth["alignment_violated"])
-    if align_correct:
-        exp_score = llm_grade_explanation(
+    # Alignment (max 0.25)
+    if action.alignment_violated == ground_truth["alignment_violated"]:
+        exp_score = grade_explanation(
             action.alignment_explanation,
             ground_truth["alignment_reason"],
             "platform rule violation"
@@ -92,10 +154,9 @@ def grade(action, ground_truth: dict) -> dict:
     else:
         breakdown["alignment"] = 0.0
 
-    # ── Memory Check (max 0.15) ─────────────────────────────────────────────
-    mem_correct = (action.memory_consistent == ground_truth["memory_consistent"])
-    if mem_correct:
-        exp_score = llm_grade_explanation(
+    # Memory (max 0.15)
+    if action.memory_consistent == ground_truth["memory_consistent"]:
+        exp_score = grade_explanation(
             action.memory_explanation,
             ground_truth["memory_reason"],
             "author history and memory consistency"
@@ -106,7 +167,7 @@ def grade(action, ground_truth: dict) -> dict:
     else:
         breakdown["memory"] = 0.0
 
-    # ── Verdict Check (max 0.10) ────────────────────────────────────────────
+    # Verdict (max 0.10)
     if action.overall_verdict == ground_truth["verdict"]:
         reward += 0.10
         breakdown["verdict"] = 0.10
@@ -119,7 +180,7 @@ def grade(action, ground_truth: dict) -> dict:
     else:
         breakdown["verdict"] = 0.0
 
-    # ── Overconfidence Penalty ──────────────────────────────────────────────
+    # Overconfidence penalty
     if action.confidence > 0.85 and reward < 0.40:
         reward = max(0.0, reward - 0.10)
         breakdown["overconfidence_penalty"] = -0.10

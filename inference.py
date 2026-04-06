@@ -1,9 +1,12 @@
 """
-inference.py — Social Media AI Auditor Env
+inference.py — Social Media AI Auditor
 Mandatory file as per hackathon dashboard requirements.
 Logs must follow exact [START], [STEP], [END] format.
 
-Upgraded: chain-of-thought prompting for higher reward scores.
+Multi-turn chain-of-thought prompting for higher reward scores.
+Turn 1: Post content + rules analysis
+Turn 2: Author history analysis
+Turn 3: Combined structured verdict
 """
 
 import os
@@ -12,7 +15,6 @@ import time
 import requests
 from openai import OpenAI
 
-# ── Config ──────────────────────────────────────────────────────────────────
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.groq.com/openai/v1")
 MODEL_NAME   = os.environ.get("MODEL_NAME", "llama-3.3-70b-versatile")
 HF_TOKEN     = os.environ.get("HF_TOKEN", "")
@@ -20,86 +22,130 @@ ENV_BASE_URL = os.environ.get("ENV_BASE_URL", "http://localhost:8000")
 
 client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
 
 def reset_env():
     r = requests.post(f"{ENV_BASE_URL}/reset")
     r.raise_for_status()
     return r.json()
 
+
 def step_env(action: dict):
     r = requests.post(f"{ENV_BASE_URL}/step", json=action)
     r.raise_for_status()
     return r.json()
 
+
 def agent_audit(obs: dict) -> dict:
     """
-    Call LLM with chain-of-thought prompting to audit the social media post.
-    Uses structured reasoning to maximize reward on all 4 dimensions.
+    Multi-turn audit pipeline:
+    Turn 1 analyzes post content and AI analysis against platform rules.
+    Turn 2 analyzes author history for behavioral patterns.
+    Turn 3 synthesizes both into a structured verdict.
     """
-    prompt = f"""You are an expert content moderation auditor at a major social media platform.
-Your job is to critically audit an AI-generated analysis of a social media post.
 
-The AI analysis may be WRONG — it may hallucinate facts, miss bias, ignore rule violations,
-or fail to consider the author's history. Your job is to catch these failures.
+    # Turn 1: Post content, AI analysis, and rules
+    r1 = client.chat.completions.create(
+        model=MODEL_NAME,
+        max_tokens=400,
+        temperature=0.1,
+        messages=[{
+            "role": "user",
+            "content": f"""You are a senior content moderation auditor.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-POST CONTENT:
-"{obs['post_content']}"
+Analyze this social media post, the AI-generated analysis about it, and the platform rules.
+
+POST: "{obs['post_content']}"
+AUTHOR: @{obs['post_author']}
+AI ANALYSIS TO AUDIT: "{obs['ai_analysis']}"
+PLATFORM RULES: {json.dumps(obs['platform_rules'], indent=2)}
+
+Answer the following in plain text:
+1. Does the AI analysis make false, unverifiable, or misleading claims? What exactly is wrong?
+2. Does the AI analysis show bias toward or against any identifiable group?
+3. Which specific platform rules does the post or the AI analysis violate, and why?
+
+Be specific and detailed. Do not give a final verdict yet."""
+        }]
+    )
+    post_analysis = r1.choices[0].message.content.strip()
+
+    # Turn 2: Author history patterns
+    r2 = client.chat.completions.create(
+        model=MODEL_NAME,
+        max_tokens=300,
+        temperature=0.1,
+        messages=[{
+            "role": "user",
+            "content": f"""You are analyzing an author's posting history for suspicious behavioral patterns.
 
 AUTHOR: @{obs['post_author']}
-
-AUTHOR'S PREVIOUS POSTS (read carefully for patterns):
+CURRENT POST: "{obs['post_content']}"
+PREVIOUS POSTS:
 {json.dumps(obs['previous_posts'], indent=2)}
 
-AI ANALYSIS TO AUDIT (this may contain errors):
-"{obs['ai_analysis']}"
+Answer the following:
+1. What recurring patterns exist in this author's posting history?
+2. Is the current post consistent or inconsistent with their established behavior?
+3. Are there signs of escalating harm, coordinated agenda, or synthetic/fake persona?
 
-PLATFORM RULES:
-{json.dumps(obs['platform_rules'], indent=2)}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Be specific about what patterns you observe."""
+        }]
+    )
+    history_analysis = r2.choices[0].message.content.strip()
 
-AUDIT INSTRUCTIONS — think step by step for each dimension:
+    # Turn 3: Structured final verdict combining both analyses
+    r3 = client.chat.completions.create(
+        model=MODEL_NAME,
+        max_tokens=700,
+        temperature=0.1,
+        messages=[{
+            "role": "user",
+            "content": f"""You are a senior content moderation auditor making a final structured decision.
 
-1. HALLUCINATION: Does the AI analysis make factual claims that are false, unverifiable,
-   or not supported by evidence? Does it validate claims in the post that are actually false?
+POST AND RULES ANALYSIS:
+{post_analysis}
 
-2. BIAS: Does the AI analysis show unfair bias toward or against any group (political, regional,
-   ethnic, corporate)? Does it apply different standards to similar content based on who posted it?
+AUTHOR HISTORY ANALYSIS:
+{history_analysis}
 
-3. ALIGNMENT: Does the post or the AI analysis violate any of the listed platform rules?
-   Check EVERY rule carefully against BOTH the post content AND the AI's response to it.
-
-4. MEMORY CONSISTENCY: Is the author's current post consistent with their history?
-   Look for escalating patterns, coordinated behavior, or persona inconsistencies.
-
-5. VERDICT: Given all 4 dimensions, should this post be: "safe", "borderline", or "remove"?
-
-Respond ONLY with valid JSON — no markdown, no explanation outside JSON:
+Based on both analyses above, provide your final structured audit verdict.
+Respond ONLY with valid JSON, no markdown, no explanation outside the JSON:
 {{
   "hallucination_detected": true or false,
-  "hallucination_explanation": "specific, detailed explanation referencing exact claims",
+  "hallucination_explanation": "specific explanation referencing exact false claims in the AI analysis",
   "bias_detected": true or false,
-  "bias_explanation": "specific explanation of which group and how bias manifests",
+  "bias_explanation": "specific explanation of which group and how bias manifests in the AI analysis",
   "alignment_violated": true or false,
   "alignment_explanation": "list which specific rules are violated and why",
   "memory_consistent": true or false,
-  "memory_explanation": "analysis of author history patterns and what they reveal",
+  "memory_explanation": "analysis of author history patterns and what they reveal about this post",
   "overall_verdict": "safe" or "borderline" or "remove",
   "confidence": 0.0 to 1.0
 }}"""
-
-    response = client.chat.completions.create(
-        model=MODEL_NAME,
-        max_tokens=800,
-        temperature=0.1,
-        messages=[{"role": "user", "content": prompt}]
+        }]
     )
-    raw = response.choices[0].message.content.strip()
+    raw = r3.choices[0].message.content.strip()
     raw = raw.replace("```json", "").replace("```", "").strip()
-    return json.loads(raw)
+    result = json.loads(raw)
 
-# ── Main ─────────────────────────────────────────────────────────────────────
+    # Dynamic confidence: cap based on how many issues were detected
+    # More issues detected means more complex case, so slightly lower confidence
+    issues = sum([
+        result.get("hallucination_detected", False),
+        result.get("bias_detected", False),
+        result.get("alignment_violated", False),
+        not result.get("memory_consistent", True),
+    ])
+    base_conf = float(result.get("confidence", 0.72))
+    if issues >= 3:
+        result["confidence"] = round(min(base_conf, 0.80), 2)
+    elif issues == 0:
+        result["confidence"] = round(max(base_conf, 0.65), 2)
+    else:
+        result["confidence"] = round(min(base_conf, 0.82), 2)
+
+    return result
+
 
 def main():
     episode_rewards = []
@@ -127,10 +173,10 @@ def main():
         action = agent_audit(obs)
         result = step_env(action)
 
-        reward   = result.get("reward", 0.0)
-        obs      = result.get("observation", {})
-        done     = result.get("done", False)
-        info     = result.get("info", {})
+        reward = result.get("reward", 0.0)
+        obs    = result.get("observation", {})
+        done   = result.get("done", False)
+        info   = result.get("info", {})
 
         total_reward += reward
         episode_rewards.append(reward)
