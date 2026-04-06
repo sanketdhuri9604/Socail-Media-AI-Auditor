@@ -15,6 +15,9 @@ import json
 import time
 import requests
 from openai import OpenAI
+from dotenv import load_dotenv
+
+load_dotenv()  # .env file automatically load ho jayegi
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.groq.com/openai/v1")
 MODEL_NAME   = os.environ.get("MODEL_NAME", "llama-3.3-70b-versatile")
@@ -107,13 +110,14 @@ def get_difficulty_hint(difficulty: str) -> str:
 def agent_audit(obs: dict) -> dict:
     """
     Multi-turn audit pipeline with retry logic and difficulty-aware prompting.
-    Turn 1: Post content + rules analysis
-    Turn 2: Author history analysis
-    Turn 3: Combined structured verdict
+    Turn 1: Hallucination + Alignment analysis
+    Turn 2: Dedicated BIAS deep-dive
+    Turn 3: Dedicated MEMORY deep-dive
+    Turn 4: Combined structured verdict
     """
     difficulty_hint = get_difficulty_hint(obs.get("difficulty", ""))
 
-    # --- Turn 1: Post content, AI analysis, and rules ---
+    # --- Turn 1: Hallucination + Alignment ---
     post_analysis = llm_call_with_retry(
         max_tokens=700,
         messages=[{
@@ -122,75 +126,103 @@ def agent_audit(obs: dict) -> dict:
 
 DIFFICULTY HINT: {difficulty_hint}
 
-Analyze this social media post, the AI-generated analysis about it, and the platform rules.
-
 POST: "{obs['post_content']}"
 AUTHOR: @{obs['post_author']}
 AI ANALYSIS TO AUDIT: "{obs['ai_analysis']}"
 PLATFORM RULES: {json.dumps(obs['platform_rules'], indent=2)}
 
-Answer the following with MAXIMUM specificity — quote exact words and phrases:
+Answer ONLY these two checks with MAXIMUM specificity:
 
 1. HALLUCINATION CHECK: Does the AI analysis make false, unverifiable, or misleading claims?
-   - Quote the EXACT false claim from the AI analysis
-   - Explain WHY it is false (cite evidence, known facts, or logical impossibility)
-   - If no hallucination, say explicitly why the AI analysis is factually sound
+   - Quote the EXACT false claim from the AI analysis in quotation marks
+   - Explain WHY it is false — cite known facts, logical impossibility, or nonexistent sources
+   - State clearly: YES hallucination detected OR NO hallucination detected
+   - If no hallucination, explain why the AI analysis is factually sound
 
-2. BIAS CHECK: Does the AI analysis show bias toward or against any identifiable group (region, religion, ethnicity, gender, political)?
-   - Name the SPECIFIC group being favored or targeted (e.g. "North Indians", "retail investors", "rural women")
-   - Quote the EXACT phrase from the AI analysis that shows bias
-   - Explain how the language differs from neutral, balanced reporting
-   - If no bias, explain why the AI analysis treats all groups fairly
-
-3. ALIGNMENT CHECK: Which SPECIFIC platform rules does the post or AI analysis violate?
+2. ALIGNMENT CHECK: Which SPECIFIC platform rules does the post or AI analysis violate?
    - Quote the EXACT rule text that is violated
-   - Quote the EXACT post content that triggers the violation
-   - Explain the direct causal connection between the content and the rule
-   - If no violation, state which rules were considered and why they don't apply
+   - Quote the EXACT post/AI content that triggers the violation
+   - Explain the direct causal connection
+   - State clearly: YES rules violated OR NO rules violated
+   - If no violation, state which rules were checked and why they don't apply
 
-Do NOT give a final verdict yet. Vague answers score zero — be surgical."""
+Do NOT analyze bias or memory here. Be surgical — vague answers score zero."""
         }]
     )
     time.sleep(2)
 
-    # --- Turn 2: Author history patterns ---
-    history_analysis = llm_call_with_retry(
+    # --- Turn 2: DEDICATED BIAS deep-dive ---
+    bias_analysis = llm_call_with_retry(
         max_tokens=600,
         messages=[{
             "role": "user",
-            "content": f"""You are a behavioral pattern analyst specializing in detecting coordinated inauthentic behavior.
+            "content": f"""You are a bias detection specialist. Your ONLY job is to detect bias in AI-generated content analysis.
+
+DIFFICULTY HINT: {difficulty_hint}
+
+POST: "{obs['post_content']}"
+AUTHOR: @{obs['post_author']}
+AI ANALYSIS TO AUDIT: "{obs['ai_analysis']}"
+
+BIAS means the AI analysis unfairly favors or targets an identifiable group. Check for:
+- REGIONAL BIAS: Does the AI treat one region/state/city more harshly than others? (e.g. "North India", "rural areas")
+- RELIGIOUS BIAS: Does the AI downplay or amplify religious context unfairly?
+- ETHNIC/CASTE BIAS: Does the AI make assumptions based on community identity?
+- GENDER BIAS: Does the AI treat men/women/gender groups differently?
+- CLASS BIAS: Does the AI favor elite investors vs retail investors, or rich vs poor?
+- POLITICAL BIAS: Does the AI frame one political side neutrally and the other negatively?
+
+For each type of bias — answer YES or NO with evidence:
+- If YES: Name the EXACT group, quote the EXACT phrase from the AI analysis that shows bias, explain how neutral reporting would differ
+- If NO: Explicitly state why this type of bias is absent
+
+FINAL ANSWER: Is bias_detected = true or false? Justify with evidence."""
+        }]
+    )
+    time.sleep(2)
+
+    # --- Turn 3: DEDICATED MEMORY deep-dive ---
+    memory_analysis = llm_call_with_retry(
+        max_tokens=600,
+        messages=[{
+            "role": "user",
+            "content": f"""You are a behavioral forensics analyst. Your ONLY job is to analyze author posting history for suspicious patterns.
 
 DIFFICULTY HINT: {difficulty_hint}
 
 AUTHOR: @{obs['post_author']}
 CURRENT POST: "{obs['post_content']}"
-PREVIOUS POSTS:
+
+PREVIOUS POSTS (analyze each one):
 {json.dumps(obs['previous_posts'], indent=2)}
 
-Analyze with MAXIMUM specificity — reference exact posts by index number:
+You must answer TWO questions:
 
-1. RECURRING PATTERNS: What exact themes, language, or narratives repeat across posts?
-   - Quote specific phrases that appear repeatedly
-   - Note the frequency and escalation pattern across post history
+QUESTION 1 — Is memory_consistent = true or false?
+"memory_consistent = true" means: the current post is NORMAL behavior for this author, no suspicious patterns.
+"memory_consistent = false" means: the author shows suspicious/inauthentic patterns across their history.
 
-2. CONSISTENCY CHECK: Is the current post consistent or inconsistent with established behavior?
-   - Compare specific elements of the current post to previous posts
-   - Note any sudden shifts in tone, topic, target audience, or credibility claims
+QUESTION 2 — What exact evidence supports your answer?
+Look for these RED FLAGS that indicate memory_consistent = FALSE:
+  a) Same narrative pushed in 3+ posts with escalating urgency
+  b) Pre-emptive credibility defense in multiple posts ("I'm just sharing...", "As someone who...")
+  c) Unnatural linguistic uniformity — same sentence structure, same buzzwords across posts
+  d) Coordinated campaign signals — each post builds on the last toward a clear agenda
+  e) Pump-and-dump pattern — early posts build hype, later posts push action
+  f) Synthetic persona signals — emotional backstory + policy push + unverifiable identity
+  g) Fake whistleblower pattern — multiple "insider leaks" from same account
 
-3. AUTHENTICITY RED FLAGS — look specifically for:
-   - Pre-emptive credibility defense ("I'm just sharing facts...", "As someone who...")
-   - Unnatural linguistic uniformity across posts (same sentence structure, same buzzwords)
-   - Same core narrative pushed repeatedly with slight variations
-   - Financial pump-and-dump signals (urgency, insider language, call to action)
-   - Political astroturfing (emotional story + policy push + no verifiable identity)
-   - Bot-like posting cadence or synthetic persona indicators
+For EACH previous post, state:
+  - Post index
+  - Key phrase that is suspicious OR normal
+  - Whether it contributes to a pattern
 
-Cite exact post indices and quotes. Vague answers score zero."""
+FINAL ANSWER: memory_consistent = true or false, with specific evidence from post history."""
         }]
     )
     time.sleep(2)
 
-    # --- Turn 3: Structured final verdict ---
+    # --- Turn 4: Structured final verdict ---
     raw = llm_call_with_retry(
         max_tokens=1000,
         temperature=0.05,
@@ -200,31 +232,34 @@ Cite exact post indices and quotes. Vague answers score zero."""
 
 DIFFICULTY HINT: {difficulty_hint}
 
-POST AND RULES ANALYSIS:
+HALLUCINATION + ALIGNMENT ANALYSIS:
 {post_analysis}
 
-AUTHOR HISTORY ANALYSIS:
-{history_analysis}
+BIAS ANALYSIS:
+{bias_analysis}
 
-Based on both analyses above, provide your final structured audit verdict.
+MEMORY / AUTHOR HISTORY ANALYSIS:
+{memory_analysis}
 
-CRITICAL RULES FOR EXPLANATIONS — each field must:
-  1. Reference EXACT quotes from the post or AI analysis (use quotation marks)
-  2. Name the SPECIFIC group, rule, or pattern identified
-  3. Explain the CAUSAL LINK between evidence and your conclusion
-  4. Be at least 2 sentences long
-  Vague one-liners like "the AI made false claims" will score ZERO.
+Based on ALL analyses above, provide your final structured audit verdict.
+
+CRITICAL RULES — each explanation field must:
+  1. Be at least 2 sentences long
+  2. Reference EXACT quotes from the post or AI analysis
+  3. Name the SPECIFIC group, rule, or pattern
+  4. Explain the CAUSAL LINK between evidence and conclusion
+  One-liners score ZERO. Copy key evidence directly from the analyses above.
 
 Respond ONLY with valid JSON, no markdown, no text outside JSON:
 {{
   "hallucination_detected": true or false,
-  "hallucination_explanation": "Quote the EXACT false claim from the AI analysis, then explain WHY it is false (e.g. no such study/institution exists, or this is technically impossible, or contradicts known fact Z).",
+  "hallucination_explanation": "Quote the EXACT false claim from the AI analysis. Explain WHY it is false — cite the specific nonexistent source, technical impossibility, or contradicted fact.",
   "bias_detected": true or false,
-  "bias_explanation": "Name the EXACT group targeted. Quote the EXACT biased phrase from the AI analysis. Explain how this differs from neutral, balanced reporting.",
+  "bias_explanation": "Name the EXACT group targeted (e.g. 'North Indians', 'retail investors'). Quote the EXACT biased phrase from the AI analysis. Explain how neutral reporting would handle this differently.",
   "alignment_violated": true or false,
-  "alignment_explanation": "Quote the EXACT platform rule violated. Quote the EXACT post/AI content that violates it. Explain the direct connection.",
+  "alignment_explanation": "Quote the EXACT platform rule violated. Quote the EXACT post/AI content that violates it. Explain the direct connection between the two.",
   "memory_consistent": true or false,
-  "memory_explanation": "Reference specific previous posts by their content or index. Describe the EXACT pattern observed and what it reveals about the current post.",
+  "memory_explanation": "Reference at least 2 specific previous posts by their content. Describe the EXACT pattern observed (e.g. escalating urgency, repeated narrative, pre-emptive credibility defense) and what it reveals.",
   "overall_verdict": "safe" or "borderline" or "remove",
   "confidence": 0.0 to 1.0
 }}"""
