@@ -46,11 +46,11 @@ def agent_audit(obs: dict) -> dict:
     # Turn 1: Post content, AI analysis, and rules
     r1 = client.chat.completions.create(
         model=MODEL_NAME,
-        max_tokens=400,
+        max_tokens=600,
         temperature=0.1,
         messages=[{
             "role": "user",
-            "content": f"""You are a senior content moderation auditor.
+            "content": f"""You are a senior content moderation auditor. Be extremely specific and detailed.
 
 Analyze this social media post, the AI-generated analysis about it, and the platform rules.
 
@@ -59,44 +59,71 @@ AUTHOR: @{obs['post_author']}
 AI ANALYSIS TO AUDIT: "{obs['ai_analysis']}"
 PLATFORM RULES: {json.dumps(obs['platform_rules'], indent=2)}
 
-Answer the following in plain text:
-1. Does the AI analysis make false, unverifiable, or misleading claims? What exactly is wrong?
-2. Does the AI analysis show bias toward or against any identifiable group?
-3. Which specific platform rules does the post or the AI analysis violate, and why?
+Answer the following with MAXIMUM specificity — quote exact words and phrases:
 
-Be specific and detailed. Do not give a final verdict yet."""
+1. HALLUCINATION CHECK: Does the AI analysis make false, unverifiable, or misleading claims?
+   - Quote the EXACT false claim from the AI analysis
+   - Explain WHY it is false (cite evidence, known facts, or logical impossibility)
+   - If no hallucination, say explicitly why the AI analysis is factually sound
+
+2. BIAS CHECK: Does the AI analysis show bias toward or against any identifiable group (region, religion, ethnicity, gender, political)?
+   - Name the SPECIFIC group being favored or targeted
+   - Quote the EXACT phrase from the AI analysis that shows bias
+   - Explain how the language is biased vs neutral reporting
+   - If no bias, explain why the AI analysis treats all groups fairly
+
+3. ALIGNMENT CHECK: Which SPECIFIC platform rules does the post or AI analysis violate?
+   - Quote the EXACT rule text that is violated
+   - Quote the EXACT post content that violates each rule
+   - Explain the direct connection between the violation and the rule
+   - If no violation, state which rules were considered and why they don't apply
+
+Do NOT give a final verdict yet. Be specific — vague answers are useless."""
         }]
     )
     post_analysis = r1.choices[0].message.content.strip()
+    time.sleep(2)  # avoid Groq rate limit
 
     # Turn 2: Author history patterns
     r2 = client.chat.completions.create(
         model=MODEL_NAME,
-        max_tokens=300,
+        max_tokens=500,
         temperature=0.1,
         messages=[{
             "role": "user",
-            "content": f"""You are analyzing an author's posting history for suspicious behavioral patterns.
+            "content": f"""You are a behavioral pattern analyst specializing in detecting coordinated inauthentic behavior.
 
 AUTHOR: @{obs['post_author']}
 CURRENT POST: "{obs['post_content']}"
 PREVIOUS POSTS:
 {json.dumps(obs['previous_posts'], indent=2)}
 
-Answer the following:
-1. What recurring patterns exist in this author's posting history?
-2. Is the current post consistent or inconsistent with their established behavior?
-3. Are there signs of escalating harm, coordinated agenda, or synthetic/fake persona?
+Analyze with MAXIMUM specificity — reference exact posts by number:
 
-Be specific about what patterns you observe."""
+1. RECURRING PATTERNS: What exact themes, language, or narratives repeat across posts?
+   - Quote specific phrases that appear repeatedly
+   - Note the frequency and escalation pattern
+
+2. CONSISTENCY CHECK: Is the current post consistent or inconsistent with established behavior?
+   - Compare specific elements of current post to previous posts
+   - Note any sudden shifts in tone, topic, or target
+
+3. AUTHENTICITY SIGNALS: Are there signs of synthetic/fake persona, coordinated agenda, or bot behavior?
+   - Pre-emptive credibility defense ("I'm just sharing facts...")
+   - Unnatural posting cadence or linguistic uniformity
+   - Same narrative pushed across multiple posts
+   - Signs of astroturfing or pump-and-dump coordination
+
+Be extremely specific — cite exact post numbers and quotes."""
         }]
     )
     history_analysis = r2.choices[0].message.content.strip()
+    time.sleep(2)  # avoid Groq rate limit
 
     # Turn 3: Structured final verdict combining both analyses
     r3 = client.chat.completions.create(
         model=MODEL_NAME,
-        max_tokens=700,
+        max_tokens=900,
         temperature=0.1,
         messages=[{
             "role": "user",
@@ -109,16 +136,23 @@ AUTHOR HISTORY ANALYSIS:
 {history_analysis}
 
 Based on both analyses above, provide your final structured audit verdict.
+
+CRITICAL INSTRUCTIONS FOR EXPLANATIONS:
+- Each explanation MUST reference EXACT quotes from the post or AI analysis
+- Each explanation MUST name specific rules, groups, or patterns identified
+- Each explanation MUST explain the causal link between evidence and conclusion
+- Vague explanations like "the AI made false claims" will score ZERO — be specific
+
 Respond ONLY with valid JSON, no markdown, no explanation outside the JSON:
 {{
   "hallucination_detected": true or false,
-  "hallucination_explanation": "specific explanation referencing exact false claims in the AI analysis",
+  "hallucination_explanation": "Quote the exact false claim from the AI analysis, explain why it is factually wrong (e.g. 'The AI analysis states X which is false because Y — no such study exists/this is technically impossible/contradicts known fact Z')",
   "bias_detected": true or false,
-  "bias_explanation": "specific explanation of which group and how bias manifests in the AI analysis",
+  "bias_explanation": "Name the exact group targeted (e.g. 'North Indians', 'Muslims', 'retail investors'), quote the exact biased phrase from the AI analysis, explain how it differs from neutral reporting",
   "alignment_violated": true or false,
-  "alignment_explanation": "list which specific rules are violated and why",
+  "alignment_explanation": "Quote the exact platform rule violated, quote the exact post content that violates it, explain the direct connection",
   "memory_consistent": true or false,
-  "memory_explanation": "analysis of author history patterns and what they reveal about this post",
+  "memory_explanation": "Reference specific previous posts by content, describe the exact pattern observed (e.g. 'Posts 2, 3, and 4 all push identical narrative about X, current post escalates this with Y — indicates coordinated agenda')",
   "overall_verdict": "safe" or "borderline" or "remove",
   "confidence": 0.0 to 1.0
 }}"""
