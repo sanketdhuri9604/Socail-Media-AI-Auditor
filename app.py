@@ -7,8 +7,8 @@ from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from models import AuditAction, AuditObservation
-from environment import SocialMediaAuditorEnvironment
-from tasks import TASKS
+from server.environment import SocialMediaAuditorEnvironment
+from server.tasks import TASKS
 
 app = FastAPI(
     title="Social Media AI Auditor Env",
