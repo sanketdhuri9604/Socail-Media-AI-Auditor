@@ -1,1 +1,13 @@
 .env
+.env.local
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+.vscode/
+.DS_Store
+*.log
+outputs/
+.huggingface/
+.pytest_cache/
