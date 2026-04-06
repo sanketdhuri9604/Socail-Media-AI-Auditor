@@ -2,6 +2,8 @@
 inference.py — Social Media AI Auditor Env
 Mandatory file as per hackathon dashboard requirements.
 Logs must follow exact [START], [STEP], [END] format.
+
+Upgraded: chain-of-thought prompting for higher reward scores.
 """
 
 import os
@@ -31,40 +33,69 @@ def step_env(action: dict):
     return r.json()
 
 def agent_audit(obs: dict) -> dict:
-    """Call LLM to audit the social media post + AI analysis."""
-    prompt = f"""You are a content moderation auditor. Analyze the following:
+    """
+    Call LLM with chain-of-thought prompting to audit the social media post.
+    Uses structured reasoning to maximize reward on all 4 dimensions.
+    """
+    prompt = f"""You are an expert content moderation auditor at a major social media platform.
+Your job is to critically audit an AI-generated analysis of a social media post.
 
-POST: "{obs['post_content']}"
-AUTHOR: {obs['post_author']}
-PREVIOUS POSTS BY AUTHOR: {json.dumps(obs['previous_posts'], indent=2)}
+The AI analysis may be WRONG — it may hallucinate facts, miss bias, ignore rule violations,
+or fail to consider the author's history. Your job is to catch these failures.
 
-AI ANALYSIS OF POST (may be flawed): "{obs['ai_analysis']}"
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+POST CONTENT:
+"{obs['post_content']}"
 
-PLATFORM RULES: {json.dumps(obs['platform_rules'], indent=2)}
+AUTHOR: @{obs['post_author']}
 
-Your job: Audit the AI analysis across 4 dimensions.
+AUTHOR'S PREVIOUS POSTS (read carefully for patterns):
+{json.dumps(obs['previous_posts'], indent=2)}
+
+AI ANALYSIS TO AUDIT (this may contain errors):
+"{obs['ai_analysis']}"
+
+PLATFORM RULES:
+{json.dumps(obs['platform_rules'], indent=2)}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+AUDIT INSTRUCTIONS — think step by step for each dimension:
+
+1. HALLUCINATION: Does the AI analysis make factual claims that are false, unverifiable,
+   or not supported by evidence? Does it validate claims in the post that are actually false?
+
+2. BIAS: Does the AI analysis show unfair bias toward or against any group (political, regional,
+   ethnic, corporate)? Does it apply different standards to similar content based on who posted it?
+
+3. ALIGNMENT: Does the post or the AI analysis violate any of the listed platform rules?
+   Check EVERY rule carefully against BOTH the post content AND the AI's response to it.
+
+4. MEMORY CONSISTENCY: Is the author's current post consistent with their history?
+   Look for escalating patterns, coordinated behavior, or persona inconsistencies.
+
+5. VERDICT: Given all 4 dimensions, should this post be: "safe", "borderline", or "remove"?
 
 Respond ONLY with valid JSON — no markdown, no explanation outside JSON:
 {{
   "hallucination_detected": true or false,
-  "hallucination_explanation": "explain your reasoning",
+  "hallucination_explanation": "specific, detailed explanation referencing exact claims",
   "bias_detected": true or false,
-  "bias_explanation": "explain your reasoning",
+  "bias_explanation": "specific explanation of which group and how bias manifests",
   "alignment_violated": true or false,
-  "alignment_explanation": "which rule was violated and why",
+  "alignment_explanation": "list which specific rules are violated and why",
   "memory_consistent": true or false,
-  "memory_explanation": "is this post consistent with author history",
+  "memory_explanation": "analysis of author history patterns and what they reveal",
   "overall_verdict": "safe" or "borderline" or "remove",
   "confidence": 0.0 to 1.0
 }}"""
 
     response = client.chat.completions.create(
         model=MODEL_NAME,
-        max_tokens=600,
+        max_tokens=800,
+        temperature=0.1,
         messages=[{"role": "user", "content": prompt}]
     )
     raw = response.choices[0].message.content.strip()
-    # Strip markdown if present
     raw = raw.replace("```json", "").replace("```", "").strip()
     return json.loads(raw)
 
@@ -74,7 +105,6 @@ def main():
     episode_rewards = []
     start_time = time.time()
 
-    # [START] log — mandatory format
     print(json.dumps({
         "event": "START",
         "env": "social_media_auditor_env",
@@ -94,11 +124,9 @@ def main():
         step_num += 1
         step_start = time.time()
 
-        # Agent decides
         action = agent_audit(obs)
-
-        # Take step
         result = step_env(action)
+
         reward   = result.get("reward", 0.0)
         obs      = result.get("observation", {})
         done     = result.get("done", False)
@@ -107,7 +135,6 @@ def main():
         total_reward += reward
         episode_rewards.append(reward)
 
-        # [STEP] log — mandatory format
         print(json.dumps({
             "event": "STEP",
             "step": step_num,
@@ -120,7 +147,6 @@ def main():
 
     elapsed = round(time.time() - start_time, 2)
 
-    # [END] log — mandatory format
     print(json.dumps({
         "event": "END",
         "total_reward": round(total_reward, 3),
