@@ -1,21 +1,28 @@
 name: social-media-auditor-env
-version: 0.1.0
+version: 2.0.0
 description: >
   An RL environment where agents audit AI-generated social media analysis
   across 4 dimensions: hallucination, bias, alignment, and memory consistency.
-  Directly addresses Meta's core content moderation challenges.
+  5 progressive real-world scenarios spanning health, politics, tech, finance,
+  and synthetic identity — directly addressing Meta's core content moderation challenges.
 
 author: sanket
 tasks:
   - id: easy
-    description: Detect obvious medical misinformation in AI analysis
+    description: Detect obvious medical misinformation in AI analysis (fake Harvard diabetes study)
     difficulty: easy
   - id: medium
-    description: Detect subtle regional bias in AI analysis of news post
+    description: Detect subtle regional bias in AI analysis of India economic news post
     difficulty: medium
   - id: hard
-    description: Detect coordinated inauthentic behavior disguised as tech expose
+    description: Detect coordinated inauthentic behavior disguised as a tech privacy expose
     difficulty: hard
+  - id: expert
+    description: Detect financial pump-and-dump scheme disguised as insider trading alpha
+    difficulty: expert
+  - id: bonus
+    description: Detect AI-generated synthetic persona used for political astroturfing
+    difficulty: bonus
 
 action_space:
   type: object
@@ -44,4 +51,4 @@ observation_space:
     - difficulty: str
 
 reward_range: [0.0, 1.0]
-max_steps: 3
+max_steps: 5
