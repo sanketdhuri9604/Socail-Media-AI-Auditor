@@ -1067,17 +1067,16 @@ def ui():
 </footer>
 
 <script>
-const DIFF_COLORS = {{
+const DIFF_COLORS = {
   easy:'#34d399', medium:'#fbbf24', hard:'#f87171', expert:'#c084fc', bonus:'#38bdf8'
-}};
-const DIM_COLORS = {{
+};
+const DIM_COLORS = {
   hallucination:'#f87171', bias:'#fbbf24', alignment:'#c084fc', memory:'#38bdf8', verdict:'#34d399'
-}};
+};
 
 let manualReward = 0, manualSteps = 0;
 
-// ── Full Episode Runner ───────────────────────────────────────────────────────
-async function runFullEpisode() {{
+async function runFullEpisode() {
   const btn = document.getElementById('run-btn');
   const icon = document.getElementById('run-icon');
   const stepsEl = document.getElementById('runner-steps');
@@ -1085,130 +1084,108 @@ async function runFullEpisode() {{
 
   btn.disabled = true;
   icon.className = 'spin';
-  icon.textContent = '⟳';
-  stepsEl.innerHTML = '<div style="color:var(--muted);font-family:\'JetBrains Mono\',monospace;font-size:12px;padding:12px 0">Dispatching tasks to LLM agent — allow ~60–90s...</div>';
+  icon.textContent = '\u21f3';
+  stepsEl.innerHTML = '<div style="color:#5c5c8a;font-family:monospace;font-size:12px;padding:12px 0">Dispatching tasks to LLM agent \u2014 allow ~60\u201390s...</div>';
   summaryEl.innerHTML = '';
 
-  try {{
-    const r = await fetch('/run_full', {{ method: 'POST' }});
+  try {
+    const r = await fetch('/run_full', { method: 'POST' });
     const data = await r.json();
     stepsEl.innerHTML = '';
-    for (let i = 0; i < data.results.length; i++) {{
+    for (let i = 0; i < data.results.length; i++) {
       await sleep(180);
       renderStepCard(data.results[i], i + 1, stepsEl);
-    }}
+    }
     await sleep(400);
     renderEpisodeSummary(data, summaryEl);
-  }} catch(e) {{
-    stepsEl.innerHTML = `<div style="color:var(--red);font-family:'JetBrains Mono',monospace;font-size:12px;padding:12px">[ERROR] ${{e.message}}</div>`;
-  }}
+  } catch(e) {
+    stepsEl.innerHTML = '<div style="color:#f87171;font-family:monospace;font-size:12px;padding:12px">[ERROR] ' + e.message + '</div>';
+  }
 
   btn.disabled = false;
   icon.className = '';
-  icon.textContent = '▶';
-}}
+  icon.textContent = '\u25b6';
+}
 
-function renderStepCard(step, num, container) {{
-  if (step.error) {{
+function renderStepCard(step, num, container) {
+  if (step.error) {
     container.insertAdjacentHTML('beforeend',
-      `<div class="step-card" style="border-color:rgba(248,113,113,0.3)"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--red)">[STEP ${{num}} ERROR] ${{step.error}}</span></div>`);
+      '<div class="step-card" style="border-color:rgba(248,113,113,0.3)"><span style="font-family:monospace;font-size:11px;color:#f87171">[STEP ' + num + ' ERROR] ' + step.error + '</span></div>');
     return;
-  }}
-  const bd = step.breakdown || {{}};
+  }
+  const bd = step.breakdown || {};
   const pct = Math.round((step.reward / 1.0) * 100);
   const taskColor = DIFF_COLORS[step.task] || '#a78bfa';
-  const action = step.action || {{}};
-  const verdictClass = {{remove:'vt-remove', borderline:'vt-borderline', safe:'vt-safe'}}[action.overall_verdict] || '';
+  const action = step.action || {};
+  const verdictClass = {remove:'vt-remove', borderline:'vt-borderline', safe:'vt-safe'}[action.overall_verdict] || '';
   const flags = [
-    action.hallucination_detected ? '<span class="sf sf-yes">🤥 Hall.</span>' : '<span class="sf sf-no">✓ Hall.</span>',
-    action.bias_detected          ? '<span class="sf sf-yes">⚖️ Bias</span>' : '<span class="sf sf-no">✓ Bias</span>',
-    action.alignment_violated     ? '<span class="sf sf-yes">📋 Rules</span>' : '<span class="sf sf-no">✓ Rules</span>',
-    !action.memory_consistent     ? '<span class="sf sf-yes">🧠 Mem.</span>' : '<span class="sf sf-no">✓ Mem.</span>',
+    action.hallucination_detected ? '<span class="sf sf-yes">\ud83e\udd25 Hall.</span>' : '<span class="sf sf-no">\u2713 Hall.</span>',
+    action.bias_detected          ? '<span class="sf sf-yes">\u2696\ufe0f Bias</span>' : '<span class="sf sf-no">\u2713 Bias</span>',
+    action.alignment_violated     ? '<span class="sf sf-yes">\ud83d\udccb Rules</span>' : '<span class="sf sf-no">\u2713 Rules</span>',
+    !action.memory_consistent     ? '<span class="sf sf-yes">\ud83e\udde0 Mem.</span>' : '<span class="sf sf-no">\u2713 Mem.</span>',
   ].join('');
 
-  container.insertAdjacentHTML('beforeend', `
-    <div class="step-card">
-      <div class="sc-top">
-        <div>
-          <div class="sc-step-num">STEP ${{num}}</div>
-          <div class="sc-task" style="color:${{taskColor}}">${{step.task.toUpperCase()}}</div>
-        </div>
-        <div class="sc-reward">
-          <div class="sc-reward-num">${{step.reward.toFixed(3)}}</div>
-          <div class="sc-reward-of">/ 1.000</div>
-        </div>
-      </div>
-      <div class="sc-bar"><div class="sc-bar-fill" style="width:${{pct}}%"></div></div>
-      <div class="sc-dims">
-        ${{['hallucination','bias','alignment','memory','verdict'].map(d =>
-          `<div class="sc-dim">
-            <div class="sc-dim-val" style="color:${{DIM_COLORS[d]}}">${{(bd[d]||0).toFixed(2)}}</div>
-            <div class="sc-dim-key">${{d.slice(0,5)}}</div>
-          </div>`
-        ).join('')}}
-      </div>
-      <div class="sc-bottom">
-        <div class="sc-flags">${{flags}}</div>
-        <span class="verdict-tag ${{verdictClass}}">${{(action.overall_verdict||'').toUpperCase()}}</span>
-      </div>
-    </div>`);
-}}
+  const dimHtml = ['hallucination','bias','alignment','memory','verdict'].map(function(d) {
+    return '<div class="sc-dim"><div class="sc-dim-val" style="color:' + DIM_COLORS[d] + '">' + (bd[d]||0).toFixed(2) + '</div><div class="sc-dim-key">' + d.slice(0,5) + '</div></div>';
+  }).join('');
 
-function renderEpisodeSummary(data, container) {{
+  container.insertAdjacentHTML('beforeend',
+    '<div class="step-card">' +
+    '<div class="sc-top">' +
+    '<div><div class="sc-step-num">STEP ' + num + '</div><div class="sc-task" style="color:' + taskColor + '">' + step.task.toUpperCase() + '</div></div>' +
+    '<div class="sc-reward"><div class="sc-reward-num">' + step.reward.toFixed(3) + '</div><div class="sc-reward-of">/ 1.000</div></div>' +
+    '</div>' +
+    '<div class="sc-bar"><div class="sc-bar-fill" style="width:' + pct + '%"></div></div>' +
+    '<div class="sc-dims">' + dimHtml + '</div>' +
+    '<div class="sc-bottom"><div class="sc-flags">' + flags + '</div><span class="verdict-tag ' + verdictClass + '">' + (action.overall_verdict||'').toUpperCase() + '</span></div>' +
+    '</div>'
+  );
+}
+
+function renderEpisodeSummary(data, container) {
   const pct = Math.round((data.total_reward / 5.0) * 100);
-  const dimMax = {{ hallucination:1.25, bias:1.25, alignment:1.25, memory:0.75, verdict:0.5 }};
-  const dimTotals = {{}};
-  for (const step of data.results) {{
-    const bd = step.breakdown || {{}};
-    for (const d of Object.keys(dimMax)) {{
+  const dimMax = { hallucination:1.25, bias:1.25, alignment:1.25, memory:0.75, verdict:0.5 };
+  const dimTotals = {};
+  for (const step of data.results) {
+    const bd = step.breakdown || {};
+    for (const d of Object.keys(dimMax)) {
       dimTotals[d] = (dimTotals[d] || 0) + (bd[d] || 0);
-    }}
-  }}
-  const dimRows = Object.entries(dimMax).map(([d, max]) => {{
+    }
+  }
+  let dimRows = '';
+  for (const [d, max] of Object.entries(dimMax)) {
     const val = (dimTotals[d] || 0);
     const barPct = Math.round((val / max) * 100);
-    return `<div class="ep-dim-row">
-      <div class="ep-dim-name">${{d}}</div>
-      <div class="ep-dim-track"><div class="ep-dim-fill" style="width:${{barPct}}%;background:${{DIM_COLORS[d]}}"></div></div>
-      <div class="ep-dim-score">${{val.toFixed(3)}}</div>
-    </div>`;
-  }}).join('');
+    dimRows += '<div class="ep-dim-row"><div class="ep-dim-name">' + d + '</div><div class="ep-dim-track"><div class="ep-dim-fill" style="width:' + barPct + '%;background:' + DIM_COLORS[d] + '"></div></div><div class="ep-dim-score">' + val.toFixed(3) + '</div></div>';
+  }
+  container.innerHTML = '<div class="ep-card"><div class="ep-total-row"><div class="ep-total-num">' + data.total_reward.toFixed(3) + '</div><div class="ep-total-meta">Total Episode Reward<br>' + pct + '% of maximum \u00b7 ' + data.avg_reward + ' avg/step</div></div>' + dimRows + '</div>';
+}
 
-  container.innerHTML = `
-    <div class="ep-card">
-      <div class="ep-total-row">
-        <div class="ep-total-num">${{data.total_reward.toFixed(3)}}</div>
-        <div class="ep-total-meta">Total Episode Reward<br>${{pct}}% of maximum · ${{data.avg_reward}} avg/step</div>
-      </div>
-      ${{dimRows}}
-    </div>`;
-}}
+function sleep(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
 
-function sleep(ms) {{ return new Promise(r => setTimeout(r, ms)); }}
-
-// ── Manual Tester ─────────────────────────────────────────────────────────────
-const log = (msg, cls='ok') => {{
+const log = function(msg, cls) {
+  cls = cls || 'ok';
   const el = document.getElementById('console');
   el.className = 'console ' + cls;
   el.textContent = msg;
-}};
+};
 
-async function doReset() {{
+async function doReset() {
   log('Initializing episode...', 'loading');
   manualReward = 0; manualSteps = 0;
-  updateScore(0, 0, {{}});
-  try {{
-    const r = await fetch('/reset', {{ method:'POST' }});
+  updateScore(0, 0, {});
+  try {
+    const r = await fetch('/reset', { method:'POST' });
     const d = await r.json();
     log(JSON.stringify(d, null, 2), 'ok');
     document.getElementById('step-btn').disabled = false;
     document.getElementById('score-section').style.display = 'block';
-  }} catch(e) {{ log('Error: ' + e.message, 'err'); }}
-}}
+  } catch(e) { log('Error: ' + e.message, 'err'); }
+}
 
-async function doStep() {{
+async function doStep() {
   log('Submitting mock action...', 'loading');
-  const action = {{
+  const action = {
     hallucination_detected: true,
     hallucination_explanation: "The AI analysis validates claims that are factually incorrect or unverifiable.",
     bias_detected: false,
@@ -1219,47 +1196,48 @@ async function doStep() {{
     memory_explanation: "The author's current post is consistent with patterns in their previous posts.",
     overall_verdict: "remove",
     confidence: 0.78
-  }};
-  try {{
-    const r = await fetch('/step', {{ method:'POST', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify(action) }});
+  };
+  try {
+    const r = await fetch('/step', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(action) });
     const d = await r.json();
     manualReward += d.reward || 0;
     manualSteps += 1;
-    updateScore(manualReward, manualSteps, d.info?.breakdown || {{}});
+    updateScore(manualReward, manualSteps, d.info && d.info.breakdown ? d.info.breakdown : {});
     log(JSON.stringify(d, null, 2), 'ok');
-    if (d.done) {{
+    if (d.done) {
       document.getElementById('step-btn').disabled = true;
-      document.getElementById('step-btn').textContent = '✓ Episode Complete';
-    }}
-  }} catch(e) {{ log('Error: ' + e.message, 'err'); }}
-}}
+      document.getElementById('step-btn').textContent = '\u2713 Episode Complete';
+    }
+  } catch(e) { log('Error: ' + e.message, 'err'); }
+}
 
-async function doState() {{
+async function doState() {
   log('Fetching state...', 'loading');
-  try {{
+  try {
     const r = await fetch('/state');
     log(JSON.stringify(await r.json(), null, 2));
-  }} catch(e) {{ log('Error: ' + e.message, 'err'); }}
-}}
+  } catch(e) { log('Error: ' + e.message, 'err'); }
+}
 
-async function doHealth() {{
+async function doHealth() {
   log('Checking health...', 'loading');
-  try {{
+  try {
     const r = await fetch('/health');
     log(JSON.stringify(await r.json(), null, 2), 'ok');
-  }} catch(e) {{ log('Error: ' + e.message, 'err'); }}
-}}
+  } catch(e) { log('Error: ' + e.message, 'err'); }
+}
 
-function updateScore(reward, steps, bd) {{
+function updateScore(reward, steps, bd) {
   document.getElementById('score-num').textContent = reward.toFixed(3);
   document.getElementById('score-fill').style.width = Math.min((reward/5)*100, 100) + '%';
-  document.getElementById('score-meta').textContent = steps + ' / 5 tasks · ' + (steps>0?(reward/steps).toFixed(3):'0.000') + ' avg/task';
+  document.getElementById('score-meta').textContent = steps + ' / 5 tasks \u00b7 ' + (steps>0?(reward/steps).toFixed(3):'0.000') + ' avg/task';
   document.getElementById('score-section').style.display = 'block';
-  const dims = [['hallucination','🤥 Hall.'],['bias','⚖️ Bias'],['alignment','📋 Align.'],['memory','🧠 Mem.'],['verdict','✅ Verdict']];
-  document.getElementById('breakdown').innerHTML = dims.map(([k,l]) =>
-    `<div class="rb-item"><div class="rb-val" style="color:${{DIM_COLORS[k]}}">${{bd[k]!==undefined?bd[k].toFixed(2):'—'}}</div><div class="rb-label">${{l}}</div></div>`
-  ).join('');
-}}
+  const dims = [['hallucination','\ud83e\udd25 Hall.'],['bias','\u2696\ufe0f Bias'],['alignment','\ud83d\udccb Align.'],['memory','\ud83e\udde0 Mem.'],['verdict','\u2705 Verdict']];
+  document.getElementById('breakdown').innerHTML = dims.map(function(pair) {
+    const k = pair[0], l = pair[1];
+    return '<div class="rb-item"><div class="rb-val" style="color:' + DIM_COLORS[k] + '">' + (bd[k]!==undefined?bd[k].toFixed(2):'\u2014') + '</div><div class="rb-label">' + l + '</div></div>';
+  }).join('');
+}
 </script>
 </body>
 </html>""")
