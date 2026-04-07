@@ -1249,6 +1249,6 @@ function updateScore(reward, steps, bd) {
 </body>
 </html>"""
 
-   final_html = html_template.replace('__TASK_CARDS__', task_cards_html)
-final_html = final_html.encode('utf-8', errors='replace').decode('utf-8')
-return HTMLResponse(content=final_html)
+       final_html = html_template.replace('__TASK_CARDS__', task_cards_html)
+       final_html = final_html.encode('utf-8', errors='replace').decode('utf-8')
+       return HTMLResponse(content=final_html)
