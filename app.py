@@ -2,6 +2,7 @@
 import os
 import json
 import time
+import re
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi import FastAPI, HTTPException
@@ -26,7 +27,10 @@ app.add_middleware(
 )
 
 env = SocialMediaAuditorEnvironment()
-
+def sanitize_html(text: str) -> str:
+    if not isinstance(text, str):
+        text = str(text)
+    return re.sub(r'[\ud800-\udfff]', '', text)
 # LLM client for /run_full internal agent
 _llm = OpenAI(
     base_url=os.environ.get("API_BASE_URL", "https://api.groq.com/openai/v1"),
@@ -225,11 +229,11 @@ def ui():
         flags_html = " ".join(flags)
 
         prev_html = "".join([
-            f'<div class="prev-post">{p}</div>'
+            f'<div class="prev-post">{sanitize_html(p)}</div>'
             for p in t["previous_posts"]
         ])
         rules_html = "".join([
-            f'<div class="rule-item">• {r}</div>'
+            f'<div class="rule-item">• {sanitize_html(r)}</div>'
             for r in t["platform_rules"]
         ])
 
