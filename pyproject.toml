@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "social-media-auditor-env"
+version = "2.0.0"
+description = "An RL environment for auditing AI-generated social media analysis across hallucination, bias, alignment, and memory dimensions."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "Sanket Dhuri", email = "sanketdhuri9604@gmail.com" }
+]
+keywords = [
+  "reinforcement-learning",
+  "content-moderation",
+  "social-media",
+  "hallucination-detection",
+  "bias-detection",
+  "openenv",
+  "llm-evaluation"
+]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+  "fastapi>=0.104.0",
+  "uvicorn[standard]>=0.24.0",
+  "openenv-core",
+  "openai>=1.0.0",
+  "pydantic>=2.0.0",
+  "requests>=2.25.0",
+]
+
+[project.urls]
+Homepage = "https://huggingface.co/spaces/Sanketdhuri9604/social-media-auditor-env"
+Repository = "https://github.com/sanketdhuri9604/Socail-Media-AI-Auditor"
