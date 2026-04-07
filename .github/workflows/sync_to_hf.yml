@@ -20,4 +20,7 @@ jobs:
           git config --global user.email "action@github.com"
           git config --global user.name "GitHub Action"
           git remote add hf https://user:$HF_TOKEN@huggingface.co/spaces/Sanketdhuri9604/social-media-auditor-env.git
+          echo "Last sync: $(date -u)" > .hf_sync_timestamp
+          git add .hf_sync_timestamp
+          git commit -m "chore: force HF rebuild $(date -u)" || true
           git push hf main --force
