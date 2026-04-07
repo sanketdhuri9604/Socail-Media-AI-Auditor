@@ -11,6 +11,7 @@ Enhancements:
 import os
 import uuid
 import random
+import time
 from datetime import datetime
 from openai import OpenAI
 from openenv_core.env_server import Environment
@@ -116,6 +117,15 @@ class SocialMediaAuditorEnvironment(Environment):
                 "verdict": 0.0,
             },
         })
+
+        # Pre-generate ALL opposition analyses at reset with 2s gaps between calls.
+        # This spreads ~5 API calls over ~8s instead of bursting mid-episode,
+        # keeping us well under Groq's 30 RPM limit.
+        for i, task_key in enumerate(shuffled):
+            if i > 0:
+                time.sleep(2)
+            _STATE["dynamic_analyses"][task_key] = _generate_opposition_analysis(task_key)
+
         return self._build_observation()
 
     def step(self, action: AuditAction) -> tuple[AuditObservation, float, bool, dict]:
@@ -199,10 +209,7 @@ class SocialMediaAuditorEnvironment(Environment):
         task_key = _STATE["current_task_key"]
         task = TASKS[task_key]
 
-        # Generate dynamic flawed analysis if not already done for this task
-        if task_key not in _STATE["dynamic_analyses"]:
-            _STATE["dynamic_analyses"][task_key] = _generate_opposition_analysis(task_key)
-
+        # Analysis is pre-generated at reset() time — guaranteed to exist here
         return AuditObservation(
             post_content=task["post_content"],
             post_author=task["post_author"],
