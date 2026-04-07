@@ -1,0 +1,23 @@
+name: Sync to Hugging Face
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Push to Hugging Face
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config --global user.email "action@github.com"
+          git config --global user.name "GitHub Action"
+          git remote add hf https://user:$HF_TOKEN@huggingface.co/spaces/Sanketdhuri9604/social-media-auditor-env.git
+          git push hf main --force
