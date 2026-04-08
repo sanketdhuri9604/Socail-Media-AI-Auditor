@@ -52,5 +52,5 @@ done_condition: >
   The episode terminates when task_id == "done" or done == true after completing
   the fixed 3-task sequence (easy -> medium -> hard).
 
-reward_range: [0.001, 0.999]
+reward_range: [0.0, 1.0]
 max_steps: 3
