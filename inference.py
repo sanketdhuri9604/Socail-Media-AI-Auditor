@@ -22,32 +22,76 @@ STEP_DELAY = float(os.environ.get("STEP_DELAY", "3.0"))
 
 client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── Helpers ─────────────────────────────────────────────────────────────────
 
 def reset_env():
-    try:
-        r = requests.post(f"{ENV_BASE_URL}/reset", timeout=30)
-        r.raise_for_status()
-        return r.json()
-    except requests.exceptions.ConnectionError as e:
-        print(json.dumps({"event": "ERROR", "stage": "reset", "error": str(e),
-                          "hint": f"Could not reach env server at {ENV_BASE_URL}. Check ENV_BASE_URL env var."}))
-        raise
-    except requests.exceptions.HTTPError as e:
-        print(json.dumps({"event": "ERROR", "stage": "reset", "status_code": r.status_code, "error": str(e)}))
-        raise
+    """
+    POST /reset with startup-aware retries.
+
+    The hackathon evaluator starts the container and immediately runs
+    inference.py, but uvicorn may need a few seconds to be ready.
+    We retry up to 12 times with 5-second gaps (60-second startup window)
+    before giving up.
+
+    Timeout is 120s because reset() pre-generates 5 opposition-AI analyses
+    (5 LLM calls with 2-second gaps each = ~20-25 seconds minimum).
+    """
+    max_attempts = 12
+    retry_gap    = 5          # seconds between connection retries
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            r = requests.post(f"{ENV_BASE_URL}/reset", timeout=120)
+            r.raise_for_status()
+            return r.json()
+
+        except requests.exceptions.ConnectionError as e:
+            # Server not ready yet — wait and retry
+            if attempt < max_attempts:
+                print(json.dumps({
+                    "event": "ENV_STARTING",
+                    "attempt": attempt,
+                    "max_attempts": max_attempts,
+                    "waiting_seconds": retry_gap,
+                    "hint": f"Env not ready at {ENV_BASE_URL} — retrying in {retry_gap}s",
+                }), flush=True)
+                time.sleep(retry_gap)
+            else:
+                # All retries exhausted — log and re-raise so main() can catch it
+                print(json.dumps({
+                    "event": "ERROR", "stage": "reset",
+                    "error": str(e)[:300],
+                    "hint": f"Env unreachable at {ENV_BASE_URL} after {max_attempts} attempts.",
+                }), flush=True)
+                raise
+
+        except requests.exceptions.Timeout as e:
+            print(json.dumps({
+                "event": "ERROR", "stage": "reset",
+                "error": f"Request timed out: {str(e)[:200]}",
+            }), flush=True)
+            raise
+
+        except requests.exceptions.HTTPError as e:
+            print(json.dumps({
+                "event": "ERROR", "stage": "reset",
+                "status_code": r.status_code, "error": str(e)[:300],
+            }), flush=True)
+            raise
+
 
 def step_env(action: dict):
     try:
-        r = requests.post(f"{ENV_BASE_URL}/step", json=action, timeout=60)
+        r = requests.post(f"{ENV_BASE_URL}/step", json=action, timeout=90)
         r.raise_for_status()
         return r.json()
     except requests.exceptions.ConnectionError as e:
-        print(json.dumps({"event": "ERROR", "stage": "step", "error": str(e),
-                          "hint": f"Could not reach env server at {ENV_BASE_URL}. Check ENV_BASE_URL env var."}))
+        print(json.dumps({"event": "ERROR", "stage": "step", "error": str(e)[:300],
+                          "hint": f"Could not reach env server at {ENV_BASE_URL}."}), flush=True)
         raise
     except requests.exceptions.HTTPError as e:
-        print(json.dumps({"event": "ERROR", "stage": "step", "status_code": r.status_code, "error": str(e)}))
+        print(json.dumps({"event": "ERROR", "stage": "step",
+                          "status_code": r.status_code, "error": str(e)[:300]}), flush=True)
         raise
 
 # Conservative fallback returned when the LLM is unreachable/fails all retries.
@@ -161,9 +205,24 @@ def main():
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }), flush=True)
 
-    obs = reset_env()
-    done = False
-    step_num = 0
+    # Wrap reset in try/except — if server is truly unreachable after all retries,
+    # print [END] and exit cleanly (no unhandled exception / non-zero exit code).
+    try:
+        obs = reset_env()
+    except Exception as reset_err:
+        print("[END] " + json.dumps({
+            "total_reward": 0.0,
+            "steps_completed": 0,
+            "rewards_per_step": [],
+            "avg_reward": 0.0,
+            "elapsed_seconds": round(time.time() - start_time, 2),
+            "status": "env_unreachable",
+            "error": str(reset_err)[:300],
+        }), flush=True)
+        return
+
+    done      = False
+    step_num  = 0
     total_reward = 0.0
 
     while not done:
