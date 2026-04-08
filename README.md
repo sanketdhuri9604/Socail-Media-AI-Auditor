@@ -152,6 +152,7 @@ docker run -p 7860:7860 \
 | Variable | Default | Description |
 |---|---|---|
 | `API_BASE_URL` | `https://api.groq.com/openai/v1` | LLM API endpoint |
+| `API_KEY` | — | Primary validator-injected API key (proxy credential) |
 | `MODEL_NAME` | `llama-3.3-70b-versatile` | Model identifier |
 | `HF_TOKEN` | — | Primary API key for LLM calls |
 | `OPENAI_API_KEY` | — | Optional fallback key if `HF_TOKEN` is unset |
@@ -161,7 +162,7 @@ docker run -p 7860:7860 \
 | `USE_DYNAMIC_ANALYSES` | `0` | Set `1` to generate opposition analysis via LLM |
 | `MAX_RPM` | `24` | Client-side LLM throttle to stay under Groq RPM cap |
 | `MAX_LLM_CALLS_PER_RUN` | `6` | Hard call-budget guard for each `inference.py` run |
-| `USE_TASK_PRIOR` | `1` | Use stable task priors to reduce API spend and variance |
+| `USE_TASK_PRIOR` | `0` | Keep `0` for evaluator runs so LLM proxy calls are observable |
 
 ## Reproducibility Defaults
 
@@ -184,7 +185,7 @@ Default baseline settings are configured to remain safely within Groq limits:
 
 - Hard throttle: `MAX_RPM=24` (below 30 RPM cap)
 - Hard call budget: `MAX_LLM_CALLS_PER_RUN=6`
-- Deterministic priors enabled: `USE_TASK_PRIOR=1` to reduce unnecessary calls
+- Keep `USE_TASK_PRIOR=0` during submission so validator sees API traffic
 
 These defaults keep request rate controlled while preserving evaluator compatibility.
  

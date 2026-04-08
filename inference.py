@@ -14,8 +14,9 @@ from openai import OpenAI
 # ── Config ───────────────────────────────────────────────────────────────────
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.groq.com/openai/v1")
 MODEL_NAME   = os.environ.get("MODEL_NAME", "llama-3.3-70b-versatile")
+API_KEY = os.environ.get("API_KEY", "")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
-HF_TOKEN     = os.environ.get("HF_TOKEN", "") or OPENAI_API_KEY
+HF_TOKEN     = API_KEY or os.environ.get("HF_TOKEN", "") or OPENAI_API_KEY
 # Port 7860 matches the uvicorn CMD in Dockerfile; 8000 was wrong and caused MaxRetryError
 ENV_BASE_URL = os.environ.get("ENV_BASE_URL", "http://localhost:7860")
 
@@ -23,7 +24,7 @@ ENV_BASE_URL = os.environ.get("ENV_BASE_URL", "http://localhost:7860")
 STEP_DELAY = float(os.environ.get("STEP_DELAY", "1.0"))
 MAX_RPM = int(os.environ.get("MAX_RPM", "24"))
 MAX_LLM_CALLS_PER_RUN = int(os.environ.get("MAX_LLM_CALLS_PER_RUN", "6"))
-USE_TASK_PRIOR = os.environ.get("USE_TASK_PRIOR", "1") == "1"
+USE_TASK_PRIOR = os.environ.get("USE_TASK_PRIOR", "0") == "1"
 
 client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 _llm_timestamps = deque(maxlen=MAX_RPM + 2)
@@ -297,8 +298,8 @@ def main():
     if not HF_TOKEN:
         print("[END] " + json.dumps({
             "status": "error",
-            "error": "No API key found. Set HF_TOKEN or OPENAI_API_KEY.",
-            "hint": "Provide HF_TOKEN (preferred for this project) or OPENAI_API_KEY before running inference.py",
+            "error": "No API key found. Set API_KEY (preferred), HF_TOKEN, or OPENAI_API_KEY.",
+            "hint": "Hackathon validator injects API_KEY with API_BASE_URL; ensure your script reads both.",
             "total_reward": 0.0,
             "steps_completed": 0,
             "elapsed_seconds": 0.0,
@@ -312,7 +313,8 @@ def main():
         "env": "social_media_auditor_env",
         "model": MODEL_NAME,
         "api_base": API_BASE_URL,
-        "key_source": "HF_TOKEN" if os.environ.get("HF_TOKEN") else "OPENAI_API_KEY",
+        "key_source": "API_KEY" if os.environ.get("API_KEY") else ("HF_TOKEN" if os.environ.get("HF_TOKEN") else "OPENAI_API_KEY"),
+        "task_prior": USE_TASK_PRIOR,
         "env_url": ENV_BASE_URL,
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }), flush=True)

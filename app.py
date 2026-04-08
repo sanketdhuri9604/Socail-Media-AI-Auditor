@@ -34,7 +34,11 @@ def sanitize_html(text: str) -> str:
 # LLM client for /run_full internal agent
 _llm = OpenAI(
     base_url=os.environ.get("API_BASE_URL", "https://api.groq.com/openai/v1"),
-  api_key=os.environ.get("HF_TOKEN", "") or os.environ.get("OPENAI_API_KEY", ""),
+  api_key=(
+    os.environ.get("API_KEY", "")
+    or os.environ.get("HF_TOKEN", "")
+    or os.environ.get("OPENAI_API_KEY", "")
+  ),
 )
 _MODEL = os.environ.get("MODEL_NAME", "llama-3.3-70b-versatile")
 

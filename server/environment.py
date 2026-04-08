@@ -18,7 +18,11 @@ MAX_STEPS = len(TASK_ORDER_DEFAULT)
 # ── Opposition AI client ───────────────────────────────────────────────────────
 _opp_client = OpenAI(
     base_url=os.environ.get("API_BASE_URL", "https://api.groq.com/openai/v1"),
-    api_key=os.environ.get("HF_TOKEN", "") or os.environ.get("OPENAI_API_KEY", ""),
+    api_key=(
+        os.environ.get("API_KEY", "")
+        or os.environ.get("HF_TOKEN", "")
+        or os.environ.get("OPENAI_API_KEY", "")
+    ),
 )
 _OPP_MODEL = os.environ.get("MODEL_NAME", "llama-3.3-70b-versatile")
 

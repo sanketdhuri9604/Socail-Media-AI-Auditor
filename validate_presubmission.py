@@ -50,7 +50,7 @@ def run() -> int:
     for marker in ["[START]", "[STEP]", "[END]"]:
         checks.append(_check(marker in inference_text, f"inference_marker:{marker}"))
 
-    for var in ["API_BASE_URL", "MODEL_NAME", "HF_TOKEN"]:
+    for var in ["API_BASE_URL", "MODEL_NAME", "API_KEY", "HF_TOKEN"]:
         checks.append(_check(var in inference_text, f"inference_env_var:{var}"))
     checks.append(_check("OPENAI_API_KEY" in inference_text, "inference_env_var:OPENAI_API_KEY"))
 
