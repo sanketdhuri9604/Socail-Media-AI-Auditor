@@ -94,6 +94,10 @@ class SocialMediaAuditorEnvironment(Environment):
         idx = TASK_ORDER_DEFAULT.index(task_key) % len(_FAILURE_MODES)
         return _FAILURE_MODES[idx]
 
+    def _norm(self, value: float) -> float:
+        """Normalize cumulative values to strict (0,1) for validator compatibility."""
+        return round(min(max(value / max(MAX_STEPS, 1), 0.001), 0.999), 3)
+
     # ── State helpers ──────────────────────────────────────────────────────────
 
     def _fresh_state(self) -> dict:
@@ -181,7 +185,7 @@ class SocialMediaAuditorEnvironment(Environment):
         info = {
             "task_completed": task_key,
             "breakdown": breakdown,
-            "total_reward_so_far": round(self._state["total_reward"], 3),
+            "total_reward_so_far": self._norm(self._state["total_reward"]),
         }
 
         self._state["task_index"] += 1
@@ -206,15 +210,18 @@ class SocialMediaAuditorEnvironment(Environment):
             "task_index":    self._state["task_index"],
             "current_task":  self._state["current_task_key"],
             "task_order":    self._state["task_order"],
-            "total_reward":  round(self._state["total_reward"], 3),
+            "total_reward":  self._norm(self._state["total_reward"]),
             "done":          self._state["done"],
             "history":       self._state["history"],
             "started_at":    self._state["started_at"],
             "failed_tasks":  self._state["failed_tasks"],
             "in_remediation": self._state["in_remediation"],
-            "dimension_totals": self._state["dimension_totals"],
+            "dimension_totals": {
+                k: self._norm(v)
+                for k, v in self._state["dimension_totals"].items()
+            },
             "dimension_averages": {
-                k: round(v / steps, 3)
+                k: self._norm(v)
                 for k, v in self._state["dimension_totals"].items()
             },
         }
