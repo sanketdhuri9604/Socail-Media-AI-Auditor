@@ -120,15 +120,16 @@ Respond ONLY with valid JSON — no markdown, no text outside the JSON:
             if "rate_limit" in err_str or "429" in err_str:
                 wait = (attempt + 1) * 15
                 print(json.dumps({"event": "RATE_LIMIT", "attempt": attempt + 1,
-                                  "waiting_seconds": wait}))
+                                  "waiting_seconds": wait}), flush=True)
             else:
                 wait = (attempt + 1) * 5
                 print(json.dumps({"event": "LLM_ERROR", "attempt": attempt + 1,
-                                  "error": str(e)[:300], "waiting_seconds": wait}))
+                                  "error": str(e)[:300], "waiting_seconds": wait}),
+                      flush=True)
             time.sleep(wait)
 
     # All retries exhausted — return fallback, never raise
-    print(json.dumps({"event": "FALLBACK", "reason": str(last_err)[:300]}))
+    print(json.dumps({"event": "FALLBACK", "reason": str(last_err)[:300]}), flush=True)
     return _FALLBACK_ACTION
 
 
@@ -137,30 +138,28 @@ Respond ONLY with valid JSON — no markdown, no text outside the JSON:
 def main():
     start_time = time.time()
 
-    # ── Guard: fail fast with a clear message if HF_TOKEN is missing ──────────
+    # Guard: the HF_TOKEN missing case also needs the [END] marker for the validator
     if not HF_TOKEN:
-        print(json.dumps({
-            "event": "END",
+        print("[END] " + json.dumps({
             "status": "error",
-            "error": "HF_TOKEN env var is not set. LLM calls will fail with 401 auth errors.",
+            "error": "HF_TOKEN env var is not set. Groq LLM calls will fail with 401.",
             "hint": "Set HF_TOKEN to your Groq API key before running inference.py",
             "total_reward": 0.0,
             "steps_completed": 0,
             "elapsed_seconds": 0.0,
-        }))
+        }), flush=True)
         return
 
     episode_rewards = []
 
-    # [START] log — mandatory format
-    print(json.dumps({
-        "event": "START",
+    # ── [START] — mandatory marker, validator scans stdout for this literal string ──
+    print("[START] " + json.dumps({
         "env": "social_media_auditor_env",
         "model": MODEL_NAME,
         "api_base": API_BASE_URL,
         "env_url": ENV_BASE_URL,
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-    }))
+    }), flush=True)
 
     obs = reset_env()
     done = False
@@ -192,16 +191,15 @@ def main():
             total_reward += reward
             episode_rewards.append(reward)
 
-            # [STEP] log — mandatory format
-            print(json.dumps({
-                "event": "STEP",
+            # ── [STEP] — mandatory marker, validator scans for this literal string ──
+            print("[STEP] " + json.dumps({
                 "step": step_num,
                 "task": info.get("task_completed", "unknown"),
                 "reward": reward,
                 "breakdown": info.get("breakdown", {}),
                 "total_reward_so_far": info.get("total_reward_so_far", 0.0),
                 "elapsed_seconds": round(time.time() - step_start, 2),
-            }))
+            }), flush=True)
 
         except Exception as step_err:
             # Log the error but continue — [END] must always be printed
@@ -209,22 +207,21 @@ def main():
                 "event": "STEP_ERROR",
                 "step": step_num,
                 "error": str(step_err)[:400],
-            }))
+            }), flush=True)
             episode_rewards.append(0.0)
             break  # exit loop cleanly; [END] is printed below
 
     elapsed = round(time.time() - start_time, 2)
 
-    # [END] log — mandatory format
-    print(json.dumps({
-        "event": "END",
+    # ── [END] — mandatory marker, validator scans stdout for this literal string ──
+    print("[END] " + json.dumps({
         "total_reward": round(total_reward, 3),
         "steps_completed": step_num,
         "rewards_per_step": episode_rewards,
         "avg_reward": round(total_reward / max(step_num, 1), 3),
         "elapsed_seconds": elapsed,
         "status": "success",
-    }))
+    }), flush=True)
 
 
 if __name__ == "__main__":
