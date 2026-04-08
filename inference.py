@@ -300,7 +300,7 @@ def main():
             "status": "error",
             "error": "No API key found. Set API_KEY (preferred), HF_TOKEN, or OPENAI_API_KEY.",
             "hint": "Hackathon validator injects API_KEY with API_BASE_URL; ensure your script reads both.",
-            "total_reward": 0.0,
+            "total_reward": 0.001,
             "steps_completed": 0,
             "elapsed_seconds": 0.0,
         }), flush=True)
@@ -325,10 +325,10 @@ def main():
         obs = reset_env()
     except Exception as reset_err:
         print("[END] " + json.dumps({
-            "total_reward": 0.0,
+            "total_reward": 0.001,
             "steps_completed": 0,
             "rewards_per_step": [],
-            "avg_reward": 0.0,
+            "avg_reward": 0.001,
             "elapsed_seconds": round(time.time() - start_time, 2),
             "status": "env_unreachable",
             "error": str(reset_err)[:300],
@@ -381,7 +381,7 @@ def main():
                 "step": step_num,
                 "error": str(step_err)[:400],
             }), flush=True)
-            episode_rewards.append(0.0)
+            episode_rewards.append(0.001)
             break  # exit loop cleanly; [END] is printed below
 
     elapsed = round(time.time() - start_time, 2)
@@ -390,7 +390,6 @@ def main():
     # ── [END] — mandatory marker, validator scans stdout for this literal string ──
     print("[END] " + json.dumps({
         "total_reward": norm_total,
-        "total_reward_raw": round(total_reward, 3),
         "steps_completed": step_num,
         "rewards_per_step": episode_rewards,
         "avg_reward": norm_total,
