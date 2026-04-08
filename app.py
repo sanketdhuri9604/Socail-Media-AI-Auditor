@@ -972,7 +972,7 @@ def ui():
   <div class="stats-row">
     <div class="stat-box"><div class="stat-num">4</div><div class="stat-lbl">Dimensions</div></div>
     <div class="stat-box"><div class="stat-num">5</div><div class="stat-lbl">Scenarios</div></div>
-    <div class="stat-box"><div class="stat-num">5.0</div><div class="stat-lbl">Max Reward</div></div>
+    <div class="stat-box"><div class="stat-num">1.0</div><div class="stat-lbl">Max Reward</div></div>
     <div class="stat-box"><div class="stat-num">LLM</div><div class="stat-lbl">Graded</div></div>
   </div>
 </div>
