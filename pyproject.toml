@@ -41,3 +41,6 @@ dependencies = [
 [project.urls]
 Homepage = "https://huggingface.co/spaces/Sanketdhuri9604/social-media-auditor-env"
 Repository = "https://github.com/sanketdhuri9604/Socail-Media-AI-Auditor"
+
+[project.scripts]
+server = "server.app:main"
