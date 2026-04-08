@@ -1,21 +1,4 @@
-"""
-environment.py — Social Media AI Auditor
-
-Improvements in this version:
-  1. Thread-safe: all episode state is stored in self._state (instance variable),
-     not a module-level global dict.  Concurrent /reset calls no longer corrupt
-     each other when the HF Space handles multiple requests.
-
-  2. Adaptive trajectory: after the 5 normal tasks complete, if the agent scored
-     < 0.4 on any task, ONE remediation step is automatically inserted.
-     That step reuses the already-cached opposition AI analysis — ZERO extra
-     LLM calls.  Perfect agents get a clean 5-step episode; imperfect agents
-     get a 6-step episode with a second chance to demonstrate learning.
-
-  3. Opposition AI: generates a deliberately flawed ai_analysis per episode
-     using 1 LLM call per task, all pre-generated at reset() time with 2-second
-     gaps to stay comfortably under Groq's 30 RPM limit.
-"""
+"""Environment with deterministic defaults for reproducible evaluation runs."""
 
 import os
 import uuid
@@ -35,11 +18,11 @@ MAX_STEPS = len(TASK_ORDER_DEFAULT)
 # ── Opposition AI client ───────────────────────────────────────────────────────
 _opp_client = OpenAI(
     base_url=os.environ.get("API_BASE_URL", "https://api.groq.com/openai/v1"),
-    api_key=os.environ.get("HF_TOKEN", ""),
+    api_key=os.environ.get("HF_TOKEN", "") or os.environ.get("OPENAI_API_KEY", ""),
 )
 _OPP_MODEL = os.environ.get("MODEL_NAME", "llama-3.3-70b-versatile")
 
-# 6 failure modes the Opposition AI randomly picks from each episode
+# 6 failure modes used by opposition AI generation
 _FAILURE_MODES = [
     "validate the false claims in the post as if they are true",
     "completely ignore the platform rules and call the post acceptable",
@@ -50,19 +33,18 @@ _FAILURE_MODES = [
 ]
 
 
-def _generate_opposition_analysis(task_key: str) -> str:
+def _generate_opposition_analysis(task_key: str, failure_mode: str) -> str:
     """
     Generates a deliberately flawed analysis for a task using 1 LLM call.
     Falls back silently to the hardcoded ai_analysis if the API call fails,
     so the episode always continues.
     """
     task = TASKS[task_key]
-    failure_mode = random.choice(_FAILURE_MODES)
     try:
         response = _opp_client.chat.completions.create(
             model=_OPP_MODEL,
             max_tokens=200,
-            temperature=0.7,
+            temperature=0.0,
             messages=[{
                 "role": "user",
                 "content": (
@@ -91,7 +73,22 @@ class SocialMediaAuditorEnvironment(Environment):
     """
 
     def __init__(self):
+        self._seed = int(os.environ.get("ENV_SEED", "42"))
+        self._rng = random.Random(self._seed)
+        self._use_dynamic_analyses = os.environ.get("USE_DYNAMIC_ANALYSES", "0") == "1"
+        self._randomize_task_order = os.environ.get("RANDOMIZE_TASK_ORDER", "0") == "1"
         self._state = self._fresh_state()
+
+    def _task_order(self) -> list[str]:
+        if not self._randomize_task_order:
+            return list(TASK_ORDER_DEFAULT)
+        ordered = list(TASK_ORDER_DEFAULT)
+        self._rng.shuffle(ordered)
+        return ordered
+
+    def _failure_mode_for_task(self, task_key: str) -> str:
+        idx = TASK_ORDER_DEFAULT.index(task_key) % len(_FAILURE_MODES)
+        return _FAILURE_MODES[idx]
 
     # ── State helpers ──────────────────────────────────────────────────────────
 
@@ -126,27 +123,29 @@ class SocialMediaAuditorEnvironment(Environment):
     # ── Core API ───────────────────────────────────────────────────────────────
 
     def reset(self) -> AuditObservation:
-        shuffled = list(TASK_ORDER_DEFAULT)
-        random.shuffle(shuffled)
+        task_order = self._task_order()
 
         # Reinitialise all state for this episode
         self._state = self._fresh_state()
         self._state.update({
             "episode_id": str(uuid.uuid4()),
-            "task_order": shuffled,
-            "current_task_key": shuffled[0],
+            "task_order": task_order,
+            "current_task_key": task_order[0],
             "started_at": datetime.utcnow().isoformat(),
         })
 
-        # Pre-generate all opposition analyses at reset time.
-        # 2-second gaps between calls → 5 calls spread over ~8 seconds,
-        # staying well under Groq's 30 RPM / 14400 RPD limits.
-        for i, task_key in enumerate(shuffled):
-            if i > 0:
-                time.sleep(2)
-            self._state["dynamic_analyses"][task_key] = (
-                _generate_opposition_analysis(task_key)
-            )
+        # Deterministic default: reuse static task analyses for reproducibility.
+        # Optional dynamic mode enables LLM-generated flawed analyses.
+        for i, task_key in enumerate(task_order):
+            if self._use_dynamic_analyses:
+                if i > 0:
+                    time.sleep(2)
+                self._state["dynamic_analyses"][task_key] = _generate_opposition_analysis(
+                    task_key,
+                    self._failure_mode_for_task(task_key),
+                )
+            else:
+                self._state["dynamic_analyses"][task_key] = TASKS[task_key]["ai_analysis"]
 
         return self._build_observation()
 

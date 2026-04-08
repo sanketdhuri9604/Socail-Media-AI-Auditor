@@ -1,23 +1,13 @@
 """
 grader.py — Social Media AI Auditor
 
-Hybrid grading strategy:
-  Step 1: Fast keyword overlap check (no API calls).
-  Step 2: ONE batched LLM call for all borderline dimensions.
-
-This keeps API calls to 0-1 per step (vs 4 before).
+Purely deterministic keyword-overlap grading — ZERO LLM/API calls.
+This means grade() never blocks, never fails, and always returns
+a reward strictly between 0.001 and 0.999 as required by OpenEnv.
 """
 
 import os
-import json
-import time
-from openai import OpenAI
 
-client = OpenAI(
-    base_url=os.environ.get("API_BASE_URL", "https://api.groq.com/openai/v1"),
-    api_key=os.environ.get("HF_TOKEN", ""),
-)
-MODEL = os.environ.get("MODEL_NAME", "llama-3.3-70b-versatile")
 
 STOP_WORDS = {
     "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
@@ -42,16 +32,17 @@ def extract_keywords(text: str) -> set:
     }
 
 
-def keyword_overlap_score(explanation: str, expected_reason: str):
+def keyword_overlap_score(explanation: str, expected_reason: str) -> float:
     """
-    Fast keyword overlap — no API call needed.
-    Returns float if confident, None if borderline (needs LLM).
+    Pure keyword overlap — no API call, always returns a float in [0.1, 0.95].
+    Never returns None (no longer marks anything as 'borderline for LLM').
+    Capped at 0.95 (not 1.0) so all-correct episodes never hit the 1.0 boundary.
     """
     if not explanation or len(explanation) < 20:
         return 0.1
 
-    expected_kw = extract_keywords(expected_reason)
-    explanation_kw = extract_keywords(explanation)
+    expected_kw   = extract_keywords(str(expected_reason))
+    explanation_kw = extract_keywords(str(explanation))
 
     if not expected_kw:
         return 0.5
@@ -59,62 +50,20 @@ def keyword_overlap_score(explanation: str, expected_reason: str):
     overlap = len(expected_kw & explanation_kw) / len(expected_kw)
 
     if overlap >= 0.45:
-        return round(min(0.65 + overlap * 0.35, 1.0), 3)
+        # Good match — cap at 0.95 to keep total reward < 1.0
+        return round(min(0.60 + overlap * 0.35, 0.95), 3)
     if overlap >= 0.20:
-        return None  # borderline — needs LLM
+        # Moderate match
+        return round(0.35 + overlap * 0.5, 3)
     return round(max(0.1, overlap * 1.5), 3)
 
 
 def llm_grade_batch(borderline_items: list[dict]) -> dict[str, float]:
     """
-    ONE batched LLM call for all borderline dimensions.
-    Max 1 API call per step regardless of how many dimensions are borderline.
+    Previously made a batched LLM call for borderline explanations.
+    Now returns the keyword fallback immediately — ZERO API calls.
+    This makes grade() deterministic, instant, and never-failing.
     """
-    if not borderline_items:
-        return {}
-
-    items_text = ""
-    for i, item in enumerate(borderline_items):
-        items_text += (
-            f"\nITEM {i+1}:\n"
-            f"  Aspect: {item['aspect']}\n"
-            f"  Expected: {item['expected_reason']}\n"
-            f"  Agent said: {item['explanation']}\n"
-        )
-
-    # Retry with exponential backoff for rate limits
-    for attempt in range(3):
-        try:
-            response = client.chat.completions.create(
-                model=MODEL,
-                max_tokens=80,
-                messages=[{
-                    "role": "user",
-                    "content": (
-                        f"Rate each explanation 0.0-1.0 on correctness and specificity.\n"
-                        f"{items_text}\n"
-                        f"Reply ONLY with JSON like: "
-                        f'{{"1": 0.8, "2": 0.5}} — no extra text.'
-                    )
-                }]
-            )
-            raw = response.choices[0].message.content.strip()
-            raw = raw.replace("```json", "").replace("```", "").strip()
-            scores = json.loads(raw)
-            return {
-                item["aspect"]: round(
-                    min(max(float(scores.get(str(i + 1), 0.4)), 0.0), 1.0), 3
-                )
-                for i, item in enumerate(borderline_items)
-            }
-        except Exception as e:
-            if "rate_limit" in str(e).lower() or "429" in str(e):
-                wait = (attempt + 1) * 8
-                time.sleep(wait)
-            else:
-                break
-
-    # Fallback — partial credit
     return {item["aspect"]: 0.4 for item in borderline_items}
 
 

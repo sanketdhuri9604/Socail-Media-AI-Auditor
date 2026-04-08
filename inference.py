@@ -13,12 +13,13 @@ from openai import OpenAI
 # ── Config ───────────────────────────────────────────────────────────────────
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.groq.com/openai/v1")
 MODEL_NAME   = os.environ.get("MODEL_NAME", "llama-3.3-70b-versatile")
-HF_TOKEN     = os.environ.get("HF_TOKEN", "")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+HF_TOKEN     = os.environ.get("HF_TOKEN", "") or OPENAI_API_KEY
 # Port 7860 matches the uvicorn CMD in Dockerfile; 8000 was wrong and caused MaxRetryError
 ENV_BASE_URL = os.environ.get("ENV_BASE_URL", "http://localhost:7860")
 
-# Delay between steps to avoid rate limits (seconds)
-STEP_DELAY = float(os.environ.get("STEP_DELAY", "3.0"))
+# Delay between steps (seconds) — reduced since grader has no LLM calls
+STEP_DELAY = float(os.environ.get("STEP_DELAY", "1.0"))
 
 client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 
@@ -151,12 +152,35 @@ Respond ONLY with valid JSON — no markdown, no text outside the JSON:
         try:
             response = client.chat.completions.create(
                 model=MODEL_NAME,
+                temperature=0.0,
                 max_tokens=700,
                 messages=[{"role": "user", "content": prompt}]
             )
             raw = response.choices[0].message.content.strip()
             raw = raw.replace("```json", "").replace("```", "").strip()
-            return json.loads(raw)
+            parsed = json.loads(raw)
+            # Sanitize: ensure correct types so Pydantic never rejects the action
+            # with a 422, which would crash the episode step.
+            verdict = str(parsed.get("overall_verdict", "remove")).lower().strip()
+            if verdict not in ("safe", "borderline", "remove"):
+                verdict = "remove"
+            try:
+                confidence = float(parsed.get("confidence", 0.5))
+                confidence = round(max(0.01, min(0.99, confidence)), 3)
+            except (TypeError, ValueError):
+                confidence = 0.5
+            return {
+                "hallucination_detected":  bool(parsed.get("hallucination_detected", True)),
+                "hallucination_explanation": str(parsed.get("hallucination_explanation", ""))[:600],
+                "bias_detected":           bool(parsed.get("bias_detected", True)),
+                "bias_explanation":         str(parsed.get("bias_explanation", ""))[:600],
+                "alignment_violated":      bool(parsed.get("alignment_violated", True)),
+                "alignment_explanation":    str(parsed.get("alignment_explanation", ""))[:600],
+                "memory_consistent":       bool(parsed.get("memory_consistent", False)),
+                "memory_explanation":       str(parsed.get("memory_explanation", ""))[:600],
+                "overall_verdict":         verdict,
+                "confidence":              confidence,
+            }
         except Exception as e:
             last_err = e
             err_str = str(e).lower()
@@ -182,12 +206,12 @@ Respond ONLY with valid JSON — no markdown, no text outside the JSON:
 def main():
     start_time = time.time()
 
-    # Guard: the HF_TOKEN missing case also needs the [END] marker for the validator
+    # Guard: missing key case still emits [END] for validator compatibility.
     if not HF_TOKEN:
         print("[END] " + json.dumps({
             "status": "error",
-            "error": "HF_TOKEN env var is not set. Groq LLM calls will fail with 401.",
-            "hint": "Set HF_TOKEN to your Groq API key before running inference.py",
+            "error": "No API key found. Set HF_TOKEN or OPENAI_API_KEY.",
+            "hint": "Provide HF_TOKEN (preferred for this project) or OPENAI_API_KEY before running inference.py",
             "total_reward": 0.0,
             "steps_completed": 0,
             "elapsed_seconds": 0.0,
@@ -201,6 +225,7 @@ def main():
         "env": "social_media_auditor_env",
         "model": MODEL_NAME,
         "api_base": API_BASE_URL,
+        "key_source": "HF_TOKEN" if os.environ.get("HF_TOKEN") else "OPENAI_API_KEY",
         "env_url": ENV_BASE_URL,
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }), flush=True)

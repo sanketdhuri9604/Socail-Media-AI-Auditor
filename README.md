@@ -5,6 +5,8 @@ colorFrom: blue
 colorTo: purple
 sdk: docker
 pinned: false
+tags:
+  - openenv
 ---
 Check out the configuration reference at https://huggingface.co/docs/hub/spaces-config-reference
 
@@ -126,13 +128,13 @@ An account appearing to be a rural Indian girl shares an emotional education pol
 pip install -r requirements.txt
  
 # Run the environment server
-uvicorn server.app:app --host 0.0.0.0 --port 8000
+uvicorn server.app:app --host 0.0.0.0 --port 7860
  
 # In another terminal — run the baseline agent
 export API_BASE_URL="https://api.groq.com/openai/v1"
 export MODEL_NAME="llama-3.3-70b-versatile"
 export HF_TOKEN="your_groq_api_key"
-export ENV_BASE_URL="http://localhost:8000"
+export ENV_BASE_URL="http://localhost:7860"
  
 python inference.py
 ```
@@ -143,7 +145,7 @@ python inference.py
  
 ```bash
 docker build -t social-media-auditor .
-docker run -p 8000:8000 \
+docker run -p 7860:7860 \
   -e HF_TOKEN=your_key \
   -e MODEL_NAME=llama-3.3-70b-versatile \
   social-media-auditor
@@ -157,8 +159,27 @@ docker run -p 8000:8000 \
 |---|---|---|
 | `API_BASE_URL` | `https://api.groq.com/openai/v1` | LLM API endpoint |
 | `MODEL_NAME` | `llama-3.3-70b-versatile` | Model identifier |
-| `HF_TOKEN` | — | API key for LLM calls |
-| `ENV_BASE_URL` | `http://localhost:8000` | Running environment URL (for inference.py) |
+| `HF_TOKEN` | — | Primary API key for LLM calls |
+| `OPENAI_API_KEY` | — | Optional fallback key if `HF_TOKEN` is unset |
+| `ENV_BASE_URL` | `http://localhost:7860` | Running environment URL (for inference.py) |
+| `ENV_SEED` | `42` | Deterministic seed for reproducible episodes |
+| `RANDOMIZE_TASK_ORDER` | `0` | Set `1` to randomize task order |
+| `USE_DYNAMIC_ANALYSES` | `0` | Set `1` to generate opposition analysis via LLM |
+
+## Reproducibility Defaults
+
+The environment now defaults to deterministic behavior for baseline reproducibility:
+
+- Fixed task order (`easy -> medium -> hard -> expert -> bonus`)
+- Static task analyses (no reset-time LLM generation)
+- Deterministic baseline model settings (`temperature=0.0`)
+
+To opt into stochastic episodes for stress testing:
+
+```bash
+export RANDOMIZE_TASK_ORDER=1
+export USE_DYNAMIC_ANALYSES=1
+```
  
 ---
  
