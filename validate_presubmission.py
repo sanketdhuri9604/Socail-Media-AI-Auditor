@@ -58,6 +58,7 @@ def run() -> int:
     checks.append(_check(hasattr(AuditObservation, "model_fields"), "typed_model:AuditObservation"))
 
     perfect_scores = {}
+    perfect_breakdowns = {}
     for key, task in TASKS.items():
         gt = task["ground_truth"]
         action = AuditAction(
@@ -72,10 +73,26 @@ def run() -> int:
             overall_verdict=gt["verdict"],
             confidence=0.7,
         )
-        perfect_scores[key] = grade(action, gt)["reward"]
+        result = grade(action, gt)
+        perfect_scores[key] = result["reward"]
+        perfect_breakdowns[key] = result["breakdown"]
 
     in_range = all(0.0 < v < 1.0 for v in perfect_scores.values())
     checks.append(_check(in_range, "grader_range_perfect", json.dumps(perfect_scores)))
+
+    breakdown_vals = []
+    for item in perfect_breakdowns.values():
+        for val in item.values():
+            if isinstance(val, (int, float)):
+                breakdown_vals.append(float(val))
+    breakdown_in_range = all(0.0 < v < 1.0 for v in breakdown_vals)
+    checks.append(
+        _check(
+            breakdown_in_range,
+            "grader_breakdown_range_perfect",
+            json.dumps(perfect_breakdowns),
+        )
+    )
 
     fixed_action = AuditAction(
         hallucination_detected=True,

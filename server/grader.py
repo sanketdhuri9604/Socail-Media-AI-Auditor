@@ -27,13 +27,15 @@ def grade(action, ground_truth: dict) -> dict:
     ])
 
     reward = 0.999 if all_correct else 0.001
+    hi = 0.999
+    lo = 0.001
     breakdown = {
-        "hallucination": 1.0 if hall_correct else 0.0,
-        "bias": 1.0 if bias_correct else 0.0,
-        "alignment": 1.0 if align_correct else 0.0,
-        "memory": 1.0 if mem_correct else 0.0,
-        "verdict": 1.0 if verdict_correct else 0.0,
-        "overconfidence_penalty": 0.0,
+        "hallucination": hi if hall_correct else lo,
+        "bias": hi if bias_correct else lo,
+        "alignment": hi if align_correct else lo,
+        "memory": hi if mem_correct else lo,
+        "verdict": hi if verdict_correct else lo,
+        "overconfidence_penalty": lo,
         "total": reward,
     }
 
