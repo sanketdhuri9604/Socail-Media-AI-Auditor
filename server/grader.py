@@ -1,13 +1,15 @@
 """Binary-style deterministic grader.
 
 Returns only two reward values per task:
-- 1.0 for fully correct action
-- 0.0 for incorrect action
+- 0.999 for fully correct action
+- 0.001 for incorrect action
+
+0.0/1.0 are avoided because the validator requires strict (0,1).
 """
 
 
 def grade(action, ground_truth: dict) -> dict:
-    """Grade action as strict binary pass/fail output."""
+    """Grade action as strict binary pass/fail output in (0,1)."""
 
     hall_correct  = action.hallucination_detected == ground_truth["hallucination"]
     bias_correct  = action.bias_detected == ground_truth["bias"]
@@ -24,7 +26,7 @@ def grade(action, ground_truth: dict) -> dict:
         verdict_correct,
     ])
 
-    reward = 1.0 if all_correct else 0.0
+    reward = 0.999 if all_correct else 0.001
     breakdown = {
         "hallucination": 1.0 if hall_correct else 0.0,
         "bias": 1.0 if bias_correct else 0.0,

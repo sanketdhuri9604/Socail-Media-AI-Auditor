@@ -74,7 +74,7 @@ def run() -> int:
         )
         perfect_scores[key] = grade(action, gt)["reward"]
 
-    in_range = all(0.0 <= v <= 1.0 for v in perfect_scores.values())
+    in_range = all(0.0 < v < 1.0 for v in perfect_scores.values())
     checks.append(_check(in_range, "grader_range_perfect", json.dumps(perfect_scores)))
 
     fixed_action = AuditAction(

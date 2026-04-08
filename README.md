@@ -172,7 +172,7 @@ The environment now defaults to deterministic behavior for baseline reproducibil
 - Static task analyses (no reset-time LLM generation)
 - Deterministic baseline model settings (`temperature=0.0`)
 
-Per-task reward emitted by `step()` is strict binary: `0.0` or `1.0`.
+Per-task reward emitted by `step()` is strict binary in-range: `0.001` or `0.999`.
 
 To opt into stochastic episodes for stress testing:
 
