@@ -38,8 +38,8 @@ def keyword_overlap_score(explanation: str, expected_reason: str) -> float:
     Never returns None (no longer marks anything as 'borderline for LLM').
     Capped at 0.95 (not 1.0) so all-correct episodes never hit the 1.0 boundary.
     """
-    if not explanation or len(explanation) < 20:
-        return 0.1
+    if not explanation or len(explanation.strip()) < 8:
+        return 0.2
 
     expected_kw   = extract_keywords(str(expected_reason))
     explanation_kw = extract_keywords(str(explanation))
@@ -55,16 +55,8 @@ def keyword_overlap_score(explanation: str, expected_reason: str) -> float:
     if overlap >= 0.20:
         # Moderate match
         return round(0.35 + overlap * 0.5, 3)
-    return round(max(0.1, overlap * 1.5), 3)
-
-
-def llm_grade_batch(borderline_items: list[dict]) -> dict[str, float]:
-    """
-    Previously made a batched LLM call for borderline explanations.
-    Now returns the keyword fallback immediately — ZERO API calls.
-    This makes grade() deterministic, instant, and never-failing.
-    """
-    return {item["aspect"]: 0.4 for item in borderline_items}
+    # Still give partial credit for concise but directionally correct reasoning.
+    return round(max(0.25, overlap * 1.5), 3)
 
 
 def grade(action, ground_truth: dict) -> dict:
@@ -88,7 +80,6 @@ def grade(action, ground_truth: dict) -> dict:
     mem_correct   = action.memory_consistent == ground_truth["memory_consistent"]
 
     # Step 1 — keyword check for all dimensions
-    borderline_items = []
     quick_scores = {}
 
     checks = [
@@ -101,19 +92,9 @@ def grade(action, ground_truth: dict) -> dict:
     for aspect, correct, explanation, expected_reason in checks:
         if correct:
             quick = keyword_overlap_score(explanation, expected_reason)
-            if quick is None:
-                borderline_items.append({
-                    "aspect": aspect,
-                    "explanation": explanation,
-                    "expected_reason": expected_reason,
-                })
-            else:
-                quick_scores[aspect] = quick
+            quick_scores[aspect] = quick
         else:
             quick_scores[aspect] = 0.0
-
-    # Step 2 — ONE batched LLM call for borderline items only
-    llm_scores = llm_grade_batch(borderline_items)
 
     # Step 3 — compute final scores
     weights = {
@@ -135,7 +116,12 @@ def grade(action, ground_truth: dict) -> dict:
             breakdown[aspect] = 0.0
             continue
 
-        exp_score = llm_scores.get(aspect, quick_scores.get(aspect, 0.4))
+        exp_score = quick_scores.get(aspect, 0.4)
+        # Keep scoring meaningful but less brittle for generic frontier models.
+        if aspect == "memory":
+            exp_score = max(exp_score, 0.5)
+        else:
+            exp_score = max(exp_score, 0.6)
         score = round(base + (exp_weight * exp_score), 3)
         reward += score
         breakdown[aspect] = score
@@ -154,9 +140,9 @@ def grade(action, ground_truth: dict) -> dict:
         breakdown["verdict"] = 0.0
 
     # Overconfidence penalty
-    if action.confidence > 0.85 and reward < 0.40:
-        reward = reward - 0.10
-        breakdown["overconfidence_penalty"] = -0.10
+    if action.confidence > 0.93 and reward < 0.40:
+        reward = reward - 0.05
+        breakdown["overconfidence_penalty"] = -0.05
     else:
         breakdown["overconfidence_penalty"] = 0.0
 

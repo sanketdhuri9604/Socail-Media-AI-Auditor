@@ -12,7 +12,7 @@ from models import AuditAction, AuditObservation
 from server.tasks import TASKS
 from server.grader import grade
 
-TASK_ORDER_DEFAULT = ["easy", "medium", "hard", "expert", "bonus"]
+TASK_ORDER_DEFAULT = ["easy", "medium", "hard"]
 MAX_STEPS = len(TASK_ORDER_DEFAULT)
 
 # ── Opposition AI client ───────────────────────────────────────────────────────
@@ -105,7 +105,7 @@ class SocialMediaAuditorEnvironment(Environment):
             "done": False,
             "started_at": None,
             # dynamic_analyses: task_key -> opposition AI generated analysis
-            # pre-populated at reset() with 2s gaps — ~5 calls in ~8s
+            # pre-populated at reset() with 2s gaps
             "dynamic_analyses": {},
             "dimension_totals": {
                 "hallucination": 0.0,
@@ -116,7 +116,7 @@ class SocialMediaAuditorEnvironment(Environment):
             },
             # Adaptive trajectory state (zero extra LLM calls)
             "failed_tasks": [],       # tasks where reward < 0.4
-            "remediation_task": None, # set after main 5 tasks complete
+            "remediation_task": None, # set after main task sequence completes
             "in_remediation": False,
         }
 
@@ -186,7 +186,7 @@ class SocialMediaAuditorEnvironment(Environment):
                 },
             )
 
-        # ── Normal path (steps 1–5) ────────────────────────────────────────────
+        # ── Normal path (main task sequence) ───────────────────────────────────
         task_key = self._state["current_task_key"]
         task     = TASKS[task_key]
 
@@ -220,7 +220,7 @@ class SocialMediaAuditorEnvironment(Environment):
         self._state["task_index"] += 1
 
         if self._state["task_index"] >= len(self._state["task_order"]):
-            # All 5 normal tasks done — check if a remediation step is warranted
+            # All normal tasks done — check if a remediation step is warranted
             failed = self._state["failed_tasks"]
             if failed:
                 # Insert 1 remediation step using the cached analysis.

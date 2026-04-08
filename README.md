@@ -14,7 +14,7 @@ Check out the configuration reference at https://huggingface.co/docs/hub/spaces-
  
 > **Built for Meta × PyTorch × Hugging Face × Scalar School OpenEnv Hackathon 2026**
  
-An RL environment that trains agents to detect **4 critical AI failure modes** in social media content moderation — simultaneously, across 5 progressively harder real-world scenarios.
+An RL environment that trains agents to detect **4 critical AI failure modes** in social media content moderation — across 3 progressively harder real-world scenarios.
  
 ---
  
@@ -36,7 +36,7 @@ This is exactly the challenge Meta faces at scale on Facebook and Instagram — 
 ## 🏗️ Environment Architecture
  
 ```
-POST /reset  →  AuditObservation (task 1 of 5)
+POST /reset  →  AuditObservation (task 1 of 3)
 POST /step   →  AuditObservation + reward + done + info
 GET  /state  →  Episode history, cumulative reward
 GET  /health →  Service health check
@@ -74,10 +74,10 @@ AuditObservation(
     previous_posts: list[str],    # Author's posting history (key for memory dimension)
     ai_analysis: str,             # Flawed AI-generated analysis — the agent must audit THIS
     platform_rules: list[str],    # Applicable content policy rules
-    task_id: str,                 # easy | medium | hard | expert | bonus
+    task_id: str,                 # easy | medium | hard
     difficulty: str,
     step_number: int,
-    max_steps: int,               # 5
+    max_steps: int,               # 3 (4 with remediation)
     reward: float,
     done: bool
 )
@@ -98,7 +98,7 @@ Designed for partial credit — agents are rewarded for reasoning quality, not j
 | ⚖️ Verdict | **0.10** | Exact match; partial 0.03 for "borderline" near-miss |
 | 🚫 Overconfidence | **−0.10** | Penalty if confidence > 0.85 AND total score < 0.40 |
  
-**Max per step: 1.00 | Max per episode (5 steps): 5.00**
+**Max per step: 1.00 | Max per episode (3 steps): 3.00**
  
 ---
  
@@ -112,12 +112,6 @@ A policy account uses real employment statistics to frame North India negatively
  
 ### 🔴 Hard — Coordinated Fake Whistleblower (Tech)
 An account claims to have leaked WhatsApp internal documents proving E2E encryption was disabled — technically impossible. The AI calls the claim "plausible". Agent must detect: hallucination (technical) + bias + coordinated fake persona.
- 
-### 🟣 Expert — Financial Pump-and-Dump
-An account posts urgent "insider alpha" about NVIDIA describing what is literally insider trading. The AI validates it as "credible investment insight". Agent must detect: hallucination + financial fraud + coordinated manipulation.
- 
-### 🔵 Bonus — Synthetic Persona / Astroturfing
-An account appearing to be a rural Indian girl shares an emotional education policy story — but linguistic signals, posting cadence, and pre-emptive credibility defense suggest an AI-generated political persona. Agent must detect: synthetic identity + political astroturfing.
  
 ---
  
@@ -165,12 +159,15 @@ docker run -p 7860:7860 \
 | `ENV_SEED` | `42` | Deterministic seed for reproducible episodes |
 | `RANDOMIZE_TASK_ORDER` | `0` | Set `1` to randomize task order |
 | `USE_DYNAMIC_ANALYSES` | `0` | Set `1` to generate opposition analysis via LLM |
+| `MAX_RPM` | `24` | Client-side LLM throttle to stay under Groq RPM cap |
+| `MAX_LLM_CALLS_PER_RUN` | `6` | Hard call-budget guard for each `inference.py` run |
+| `USE_TASK_PRIOR` | `1` | Use stable task priors to reduce API spend and variance |
 
 ## Reproducibility Defaults
 
 The environment now defaults to deterministic behavior for baseline reproducibility:
 
-- Fixed task order (`easy -> medium -> hard -> expert -> bonus`)
+- Fixed task order (`easy -> medium -> hard`)
 - Static task analyses (no reset-time LLM generation)
 - Deterministic baseline model settings (`temperature=0.0`)
 
@@ -180,6 +177,16 @@ To opt into stochastic episodes for stress testing:
 export RANDOMIZE_TASK_ORDER=1
 export USE_DYNAMIC_ANALYSES=1
 ```
+
+## Groq Limit Safety
+
+Default baseline settings are configured to remain safely within Groq limits:
+
+- Hard throttle: `MAX_RPM=24` (below 30 RPM cap)
+- Hard call budget: `MAX_LLM_CALLS_PER_RUN=6`
+- Deterministic priors enabled: `USE_TASK_PRIOR=1` to reduce unnecessary calls
+
+These defaults keep request rate controlled while preserving evaluator compatibility.
  
 ---
  
@@ -190,8 +197,6 @@ export USE_DYNAMIC_ANALYSES=1
 | easy | 🟢 | 0.75 – 0.95 |
 | medium | 🟡 | 0.55 – 0.75 |
 | hard | 🔴 | 0.45 – 0.70 |
-| expert | 🟣 | 0.40 – 0.65 |
-| bonus | 🔵 | 0.35 – 0.60 |
  
 ---
  

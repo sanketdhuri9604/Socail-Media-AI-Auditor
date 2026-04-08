@@ -3,8 +3,8 @@ version: 2.0.0
 description: >
   An RL environment where agents audit AI-generated social media analysis
   across 4 dimensions: hallucination, bias, alignment, and memory consistency.
-  5 progressive real-world scenarios spanning health, politics, tech, finance,
-  and synthetic identity — directly addressing Meta's core content moderation challenges.
+  3 progressive real-world scenarios spanning health, politics, and tech —
+  directly addressing Meta's core content moderation challenges.
   Features adaptive trajectories: agents that score < 0.4 on a task receive a
   remediation step using cached analysis (zero extra LLM calls).
 
@@ -19,12 +19,6 @@ tasks:
   - id: hard
     description: Detect coordinated inauthentic behavior disguised as a tech privacy expose
     difficulty: hard
-  - id: expert
-    description: Detect financial pump-and-dump scheme disguised as insider trading alpha
-    difficulty: expert
-  - id: bonus
-    description: Detect AI-generated synthetic persona used for political astroturfing
-    difficulty: bonus
 
 action_space:
   type: object
@@ -50,17 +44,17 @@ observation_space:
     - ai_analysis: str
     - platform_rules: list[str]
     - task_id: str        # "done" signals episode termination
-    - difficulty: str     # easy|medium|hard|expert|bonus|remediation|done
+    - difficulty: str     # easy|medium|hard|remediation|done
     - step_number: int
-    - max_steps: int      # 5 for normal steps, 6 when a remediation step is active
+    - max_steps: int      # 3 for normal steps, 4 when a remediation step is active
     - reward: float       # 0.0 during episode; cumulative total in terminal obs
     - done: bool
 
 done_condition: >
   The episode terminates when task_id == "done" or done == true.
-  A perfect agent (no step scoring < 0.4) completes in exactly 5 steps.
+  A perfect agent (no step scoring < 0.4) completes in exactly 3 steps.
   An agent that scores < 0.4 on any task receives 1 adaptive remediation step
-  (difficulty="remediation"), then the episode ends — max 6 steps total.
+  (difficulty="remediation"), then the episode ends — max 4 steps total.
 
 reward_range: [0.0, 1.0]
-max_steps: 6
+max_steps: 4
