@@ -78,7 +78,7 @@ AuditObservation(
     difficulty: str,
     step_number: int,
     max_steps: int,               # 3 fixed steps
-    reward: float,
+    reward: float,                # latest step reward in (0,1)
     done: bool
 )
 ```

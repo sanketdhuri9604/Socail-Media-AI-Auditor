@@ -385,13 +385,15 @@ def main():
             break  # exit loop cleanly; [END] is printed below
 
     elapsed = round(time.time() - start_time, 2)
+    norm_total = round(min(max(total_reward / max(step_num, 1), 0.001), 0.999), 3)
 
     # ── [END] — mandatory marker, validator scans stdout for this literal string ──
     print("[END] " + json.dumps({
-        "total_reward": round(total_reward, 3),
+        "total_reward": norm_total,
+        "total_reward_raw": round(total_reward, 3),
         "steps_completed": step_num,
         "rewards_per_step": episode_rewards,
-        "avg_reward": round(total_reward / max(step_num, 1), 3),
+        "avg_reward": norm_total,
         "elapsed_seconds": elapsed,
         "status": "success",
     }), flush=True)

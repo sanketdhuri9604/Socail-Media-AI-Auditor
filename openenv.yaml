@@ -45,7 +45,7 @@ observation_space:
     - difficulty: str     # easy|medium|hard|done
     - step_number: int
     - max_steps: int      # 3 fixed steps per episode
-    - reward: float       # 0.0 during episode; normalized terminal reward in final obs
+    - reward: float       # latest step reward in (0,1), defaults to 0.001 on reset
     - done: bool
 
 done_condition: >

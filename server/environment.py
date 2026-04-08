@@ -98,6 +98,15 @@ class SocialMediaAuditorEnvironment(Environment):
         """Normalize cumulative values to strict (0,1) for validator compatibility."""
         return round(min(max(value / max(MAX_STEPS, 1), 0.001), 0.999), 3)
 
+    def _obs_with_feedback(
+        self,
+        obs: AuditObservation,
+        reward: float,
+        done: bool,
+    ) -> AuditObservation:
+        """Attach step-level reward/done values directly into the observation payload."""
+        return obs.model_copy(update={"reward": reward, "done": done})
+
     # ── State helpers ──────────────────────────────────────────────────────────
 
     def _fresh_state(self) -> dict:
@@ -192,12 +201,14 @@ class SocialMediaAuditorEnvironment(Environment):
 
         if self._state["task_index"] >= len(self._state["task_order"]):
             self._state["done"] = True
-            return self._build_observation(final=True), reward, True, info
+            final_obs = self._build_observation(final=True)
+            return self._obs_with_feedback(final_obs, reward, True), reward, True, info
         else:
             self._state["current_task_key"] = (
                 self._state["task_order"][self._state["task_index"]]
             )
-            return self._build_observation(), reward, False, info
+            next_obs = self._build_observation()
+            return self._obs_with_feedback(next_obs, reward, False), reward, False, info
 
     # ── State property (read-only snapshot) ───────────────────────────────────
 
@@ -292,6 +303,6 @@ class SocialMediaAuditorEnvironment(Environment):
             difficulty     = task_key,
             step_number    = self._state["step_count"],
             max_steps      = MAX_STEPS,
-            reward         = 0.0,
+            reward         = 0.001,
             done           = False,
         )
