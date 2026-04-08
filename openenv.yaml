@@ -7,16 +7,27 @@ description: >
   directly addressing Meta's core content moderation challenges.
 
 author: sanket
+graders:
+  default:
+    type: server_binary_grader
+    implementation: server/grader.py:grade
+    score_range: [0.001, 0.999]
 tasks:
   - id: easy
     description: Detect obvious medical misinformation in AI analysis (fake Harvard diabetes study)
     difficulty: easy
+    grader: default
+    score_range: [0.001, 0.999]
   - id: medium
     description: Detect subtle regional bias in AI analysis of India economic news post
     difficulty: medium
+    grader: default
+    score_range: [0.001, 0.999]
   - id: hard
     description: Detect coordinated inauthentic behavior disguised as a tech privacy expose
     difficulty: hard
+    grader: default
+    score_range: [0.001, 0.999]
 
 action_space:
   type: object

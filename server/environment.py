@@ -194,6 +194,8 @@ class SocialMediaAuditorEnvironment(Environment):
         info = {
             "task_completed": task_key,
             "status": "ok",
+            "breakdown": breakdown,
+            "total_reward_so_far": self._norm(self._state["total_reward"]),
         }
 
         self._state["task_index"] += 1
