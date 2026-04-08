@@ -77,7 +77,7 @@ AuditObservation(
     task_id: str,                 # easy | medium | hard
     difficulty: str,
     step_number: int,
-    max_steps: int,               # 3 (4 with remediation)
+    max_steps: int,               # 3 fixed steps
     reward: float,
     done: bool
 )
@@ -171,6 +171,8 @@ The environment now defaults to deterministic behavior for baseline reproducibil
 - Fixed task order (`easy -> medium -> hard`)
 - Static task analyses (no reset-time LLM generation)
 - Deterministic baseline model settings (`temperature=0.0`)
+
+Per-task reward emitted by `step()` is strictly clamped to `(0.001, 0.999)` for validator compatibility.
 
 To opt into stochastic episodes for stress testing:
 

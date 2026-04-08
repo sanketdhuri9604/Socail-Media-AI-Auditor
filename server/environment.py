@@ -157,39 +157,6 @@ class SocialMediaAuditorEnvironment(Environment):
         if self._state["done"]:
             raise RuntimeError("Episode is done. Call /reset to start a new episode.")
 
-        # ── Remediation path (6th step, zero extra LLM calls) ─────────────────
-        if self._state["in_remediation"]:
-            task_key = self._state["remediation_task"]
-            task = TASKS[task_key]
-
-            result   = grade(action, task["ground_truth"])
-            reward   = result["reward"]
-            breakdown = result["breakdown"]
-
-            self._state["total_reward"] += reward
-            self._state["step_count"]   += 1
-            self._state["history"].append({
-                "task": f"{task_key}_remediation",
-                "reward": reward,
-                "breakdown": breakdown,
-            })
-            for dim in ["hallucination", "bias", "alignment", "memory", "verdict"]:
-                self._state["dimension_totals"][dim] = round(
-                    self._state["dimension_totals"][dim] + breakdown.get(dim, 0.0), 3
-                )
-
-            self._state["done"] = True
-            return (
-                self._build_observation(final=True),
-                reward,
-                True,
-                {
-                    "task_completed": f"{task_key}_remediation",
-                    "breakdown": breakdown,
-                    "total_reward_so_far": round(self._state["total_reward"], 3),
-                },
-            )
-
         # ── Normal path (main task sequence) ───────────────────────────────────
         task_key = self._state["current_task_key"]
         task     = TASKS[task_key]
@@ -206,10 +173,6 @@ class SocialMediaAuditorEnvironment(Environment):
             "breakdown": breakdown,
         })
 
-        # Track tasks where the agent struggled (for adaptive remediation)
-        if reward < 0.4:
-            self._state["failed_tasks"].append(task_key)
-
         for dim in ["hallucination", "bias", "alignment", "memory", "verdict"]:
             self._state["dimension_totals"][dim] = round(
                 self._state["dimension_totals"][dim] + breakdown.get(dim, 0.0), 3
@@ -224,24 +187,8 @@ class SocialMediaAuditorEnvironment(Environment):
         self._state["task_index"] += 1
 
         if self._state["task_index"] >= len(self._state["task_order"]):
-            # All normal tasks done — check if a remediation step is warranted
-            failed = self._state["failed_tasks"]
-            if failed:
-                # Insert 1 remediation step using the cached analysis.
-                # This costs 0 extra LLM calls (analysis already generated at reset).
-                rem_task = failed[0]  # remediate the first failed task
-                self._state["remediation_task"] = rem_task
-                self._state["in_remediation"]   = True
-                return (
-                    self._build_observation(remediation_task=rem_task),
-                    reward,
-                    False,  # not done yet — one more step coming
-                    info,
-                )
-            else:
-                # Perfect run — episode ends immediately
-                self._state["done"] = True
-                return self._build_observation(final=True), reward, True, info
+            self._state["done"] = True
+            return self._build_observation(final=True), reward, True, info
         else:
             self._state["current_task_key"] = (
                 self._state["task_order"][self._state["task_index"]]
@@ -301,6 +248,10 @@ class SocialMediaAuditorEnvironment(Environment):
 
         # Terminal observation — episode complete
         if final:
+            normalized_terminal_reward = round(
+                min(max(self._state["total_reward"] / max(MAX_STEPS, 1), 0.001), 0.999),
+                3,
+            )
             return AuditObservation(
                 post_content   = "Episode complete.",
                 post_author    = "",
@@ -315,7 +266,7 @@ class SocialMediaAuditorEnvironment(Environment):
                 difficulty     = "done",
                 step_number    = self._state["step_count"],
                 max_steps      = MAX_STEPS,
-                reward         = self._state["total_reward"],
+                reward         = normalized_terminal_reward,
                 done           = True,
             )
 
