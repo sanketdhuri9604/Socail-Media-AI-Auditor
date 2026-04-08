@@ -356,7 +356,7 @@ def main():
 
             # Take step
             result = step_env(action)
-            reward = result.get("reward", 0.0)
+            reward = result.get("reward", 0.001)
             obs    = result.get("observation", {})
             done   = result.get("done", False)
             info   = result.get("info", {})
@@ -370,7 +370,7 @@ def main():
                 "task": info.get("task_completed", "unknown"),
                 "reward": reward,
                 "breakdown": info.get("breakdown", {}),
-                "total_reward_so_far": info.get("total_reward_so_far", 0.0),
+                "total_reward_so_far": info.get("total_reward_so_far", 0.001),
                 "elapsed_seconds": round(time.time() - step_start, 2),
             }), flush=True)
 

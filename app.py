@@ -176,11 +176,11 @@ def run_full():
             last_info = info
 
             results.append({
-                "task": info["task_completed"],
+              "task": info.get("task_completed", obs.get("task_id", "unknown")),
                 "reward": reward,
-                "breakdown": info["breakdown"],
+              "breakdown": info.get("breakdown", {}),
                 "action": action_dict,
-                "total_reward_so_far": info["total_reward_so_far"],
+              "total_reward_so_far": info.get("total_reward_so_far", 0.001),
             })
 
             if done:
@@ -189,12 +189,12 @@ def run_full():
             results.append({"error": str(e), "task": obs.get("task_id", "unknown")})
             break
 
-    total = last_info.get("total_reward_so_far", 0.0)
+    total = last_info.get("total_reward_so_far", 0.001)
     return {
         "results": results,
         "total_reward": total,
         "steps": len(results),
-        "avg_reward": round(total / max(len(results), 1), 3),
+      "avg_reward": round(total / max(len(results), 1), 3),
     }
 
 

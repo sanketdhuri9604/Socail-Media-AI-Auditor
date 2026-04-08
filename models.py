@@ -22,5 +22,5 @@ class AuditObservation(BaseModel):
     difficulty: str
     step_number: int
     max_steps: int
-    reward: float = 0.0
+    reward: float = 0.001
     done: bool = False

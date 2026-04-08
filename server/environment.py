@@ -193,8 +193,7 @@ class SocialMediaAuditorEnvironment(Environment):
 
         info = {
             "task_completed": task_key,
-            "breakdown": breakdown,
-            "total_reward_so_far": self._norm(self._state["total_reward"]),
+            "status": "ok",
         }
 
         self._state["task_index"] += 1
@@ -260,7 +259,7 @@ class SocialMediaAuditorEnvironment(Environment):
                 difficulty     = "remediation",
                 step_number    = self._state["step_count"],
                 max_steps      = MAX_STEPS + 1,  # signal the bonus step to the agent
-                reward         = 0.0,
+                reward         = 0.001,
                 done           = False,
             )
 

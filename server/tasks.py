@@ -291,3 +291,6 @@ TASKS = {
         },
     },
 }
+
+# Validator-facing task set is intentionally constrained to exactly 3 tasks.
+TASKS = {k: TASKS[k] for k in ("easy", "medium", "hard")}
