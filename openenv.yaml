@@ -5,6 +5,8 @@ description: >
   across 4 dimensions: hallucination, bias, alignment, and memory consistency.
   5 progressive real-world scenarios spanning health, politics, tech, finance,
   and synthetic identity — directly addressing Meta's core content moderation challenges.
+  Features adaptive trajectories: agents that score < 0.4 on a task receive a
+  remediation step using cached analysis (zero extra LLM calls).
 
 author: sanket
 tasks:
@@ -47,8 +49,18 @@ observation_space:
     - previous_posts: list[str]
     - ai_analysis: str
     - platform_rules: list[str]
-    - task_id: str
-    - difficulty: str
+    - task_id: str        # "done" signals episode termination
+    - difficulty: str     # easy|medium|hard|expert|bonus|remediation|done
+    - step_number: int
+    - max_steps: int      # 5 for normal steps, 6 when a remediation step is active
+    - reward: float       # 0.0 during episode; cumulative total in terminal obs
+    - done: bool
+
+done_condition: >
+  The episode terminates when task_id == "done" or done == true.
+  A perfect agent (no step scoring < 0.4) completes in exactly 5 steps.
+  An agent that scores < 0.4 on any task receives 1 adaptive remediation step
+  (difficulty="remediation"), then the episode ends — max 6 steps total.
 
 reward_range: [0.0, 1.0]
-max_steps: 5
+max_steps: 6

@@ -109,14 +109,30 @@ Respond ONLY with valid JSON — no markdown, no text outside the JSON:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    episode_rewards = []
     start_time = time.time()
+
+    # ── Guard: fail fast with a clear message if HF_TOKEN is missing ──────────
+    if not HF_TOKEN:
+        print(json.dumps({
+            "event": "END",
+            "status": "error",
+            "error": "HF_TOKEN env var is not set. LLM calls will fail with 401 auth errors.",
+            "hint": "Set HF_TOKEN to your Groq API key before running inference.py",
+            "total_reward": 0.0,
+            "steps_completed": 0,
+            "elapsed_seconds": 0.0,
+        }))
+        return
+
+    episode_rewards = []
 
     # [START] log — mandatory format
     print(json.dumps({
         "event": "START",
         "env": "social_media_auditor_env",
         "model": MODEL_NAME,
+        "api_base": API_BASE_URL,
+        "env_url": ENV_BASE_URL,
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }))
 
