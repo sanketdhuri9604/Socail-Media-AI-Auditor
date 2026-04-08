@@ -210,6 +210,13 @@ def ui():
         "expert": {"color": "#c084fc", "bg": "rgba(192,132,252,0.12)", "border": "rgba(192,132,252,0.3)", "icon": "🟣", "label": "EXPERT"},
         "bonus":  {"color": "#38bdf8", "bg": "rgba(56,189,248,0.12)",  "border": "rgba(56,189,248,0.3)",  "icon": "🔵", "label": "BONUS"},
     }
+    default_diff_meta = {
+      "color": "#94a3b8",
+      "bg": "rgba(148,163,184,0.12)",
+      "border": "rgba(148,163,184,0.3)",
+      "icon": "⚪",
+      "label": "TASK",
+    }
     verdict_meta = {
         "remove":    {"color": "#f87171", "bg": "rgba(248,113,113,0.15)"},
         "borderline":{"color": "#fbbf24", "bg": "rgba(251,191,36,0.15)"},
@@ -217,9 +224,9 @@ def ui():
     }
 
     task_cards_html = ""
-    for tid in ["easy", "medium", "hard", "expert", "bonus"]:
+    for tid in TASKS.keys():
         t = TASKS[tid]
-        dm = difficulty_meta[tid]
+        dm = difficulty_meta.get(tid, default_diff_meta)
         vm = verdict_meta[t["ground_truth"]["verdict"]]
         flags = []
         if t["ground_truth"].get("hallucination"):
