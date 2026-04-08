@@ -206,12 +206,14 @@ def grade(action, ground_truth: dict) -> dict:
 
     # Overconfidence penalty
     if action.confidence > 0.85 and reward < 0.40:
-        reward = max(0.0, reward - 0.10)
+        reward = reward - 0.10
         breakdown["overconfidence_penalty"] = -0.10
     else:
         breakdown["overconfidence_penalty"] = 0.0
 
-    reward = round(min(max(reward, 0.0), 1.0), 3)
+    # OpenEnv requires scores STRICTLY between 0 and 1 — 0.0 and 1.0 are both rejected.
+    # Clamp to (0.001, 0.999) to satisfy the validator's range check.
+    reward = round(min(max(reward, 0.001), 0.999), 3)
     breakdown["total"] = reward
 
     return {"reward": reward, "breakdown": breakdown}
