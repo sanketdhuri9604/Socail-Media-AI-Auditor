@@ -982,7 +982,7 @@ def ui():
   <p class="hero-sub">An RL environment for training agents to detect <strong>hallucinations</strong>, <strong>bias</strong>, <strong>alignment failures</strong>, and <strong>memory inconsistencies</strong> in AI-generated content moderation.</p>
   <div class="stats-row">
     <div class="stat-box"><div class="stat-num">4</div><div class="stat-lbl">Dimensions</div></div>
-    <div class="stat-box"><div class="stat-num">5</div><div class="stat-lbl">Scenarios</div></div>
+    <div class="stat-box"><div class="stat-num">3</div><div class="stat-lbl">Scenarios</div></div>
     <div class="stat-box"><div class="stat-num">1.0</div><div class="stat-lbl">Max Reward</div></div>
     <div class="stat-box"><div class="stat-num">LLM</div><div class="stat-lbl">Graded</div></div>
   </div>
@@ -993,7 +993,7 @@ def ui():
   <!-- Full Episode Runner -->
   <div class="card-glass">
     <div class="section-title">🤖 Full Episode Runner</div>
-    <p class="run-desc">Runs a complete 5-task episode with the built-in multi-turn LLM agent. Each task gets <code>3 reasoning turns</code> before a structured verdict is submitted. Task order is randomized each run.</p>
+    <p class="run-desc">Runs a complete 3-task episode with the built-in multi-turn LLM agent. Each task gets <code>3 reasoning turns</code> before a structured verdict is submitted. Task order is randomized each run.</p>
     <button class="btn-run" id="run-btn" onclick="runFullEpisode()">
       <span id="run-icon">&#9654;</span> Run Full Episode
     </button>
@@ -1020,7 +1020,7 @@ def ui():
           </div>
           <div class="score-track-wrap">
             <div class="score-track"><div class="score-fill" id="score-fill" style="width:0%"></div></div>
-            <div class="score-meta" id="score-meta">0 / 5 tasks</div>
+            <div class="score-meta" id="score-meta">0 / 3 tasks</div>
           </div>
         </div>
         <div class="rb-grid" id="breakdown"></div>
@@ -1086,7 +1086,7 @@ def ui():
 
 <script>
 const DIFF_COLORS = {
-  easy:'#34d399', medium:'#fbbf24', hard:'#f87171', expert:'#c084fc', bonus:'#38bdf8'
+  easy:'#34d399', medium:'#fbbf24', hard:'#f87171'
 };
 const DIM_COLORS = {
   hallucination:'#f87171', bias:'#fbbf24', alignment:'#c084fc', memory:'#38bdf8', verdict:'#34d399'
@@ -1161,8 +1161,8 @@ function renderStepCard(step, num, container) {
 }
 
 function renderEpisodeSummary(data, container) {
-  const pct = Math.round((data.total_reward / 5.0) * 100);
-  const dimMax = { hallucination:1.25, bias:1.25, alignment:1.25, memory:0.75, verdict:0.5 };
+  const pct = Math.round((data.total_reward / 3.0) * 100);
+  const dimMax = { hallucination:0.75, bias:0.75, alignment:0.75, memory:0.45, verdict:0.30 };
   const dimTotals = {};
   for (const step of data.results) {
     const bd = step.breakdown || {};
@@ -1247,8 +1247,8 @@ async function doHealth() {
 
 function updateScore(reward, steps, bd) {
   document.getElementById('score-num').textContent = reward.toFixed(3);
-  document.getElementById('score-fill').style.width = Math.min((reward/5)*100, 100) + '%';
-  document.getElementById('score-meta').textContent = steps + ' / 5 tasks \u00b7 ' + (steps>0?(reward/steps).toFixed(3):'0.000') + ' avg/task';
+  document.getElementById('score-fill').style.width = Math.min((reward/3)*100, 100) + '%';
+  document.getElementById('score-meta').textContent = steps + ' / 3 tasks \u00b7 ' + (steps>0?(reward/steps).toFixed(3):'0.000') + ' avg/task';
   document.getElementById('score-section').style.display = 'block';
   const dims = [['hallucination','\ud83e\udd25 Hall.'],['bias','\u2696\ufe0f Bias'],['alignment','\ud83d\udccb Align.'],['memory','\ud83e\udde0 Mem.'],['verdict','\u2705 Verdict']];
   document.getElementById('breakdown').innerHTML = dims.map(function(pair) {
