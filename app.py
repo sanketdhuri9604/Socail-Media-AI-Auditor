@@ -1,14 +1,11 @@
 ﻿import sys
 import os
-import json
-import time
 import re
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
-from openai import OpenAI
 
 from models import AuditAction, AuditObservation
 from server.environment import SocialMediaAuditorEnvironment
@@ -31,97 +28,6 @@ def sanitize_html(text: str) -> str:
     if not isinstance(text, str):
         text = str(text)
     return re.sub(r'[\ud800-\udfff]', '', text)
-# LLM client for /run_full internal agent
-_llm = OpenAI(
-    base_url=os.environ.get("API_BASE_URL", "https://api.groq.com/openai/v1"),
-  api_key=(
-    os.environ.get("API_KEY", "")
-    or os.environ.get("HF_TOKEN", "")
-    or os.environ.get("OPENAI_API_KEY", "")
-  ),
-)
-_MODEL = os.environ.get("MODEL_NAME", "llama-3.3-70b-versatile")
-
-
-def _agent_audit(obs: dict) -> dict:
-    """
-    Multi-turn agent used by /run_full.
-    Turn 1: post + rules analysis
-    Turn 2: author history analysis
-    Turn 3: combined structured verdict
-    """
-    r1 = _llm.chat.completions.create(
-        model=_MODEL, max_tokens=400, temperature=0.1,
-        messages=[{"role": "user", "content":
-            f'You are a senior content moderation auditor.\n\n'
-            f'POST: "{obs["post_content"]}"\n'
-            f'AUTHOR: @{obs["post_author"]}\n'
-            f'AI ANALYSIS TO AUDIT: "{obs["ai_analysis"]}"\n'
-            f'PLATFORM RULES: {json.dumps(obs["platform_rules"], indent=2)}\n\n'
-            f'Answer:\n'
-            f'1. Does the AI analysis make false or unverifiable claims? What exactly?\n'
-            f'2. Does the AI analysis show bias toward or against any group?\n'
-            f'3. Which specific platform rules are violated and why?\n\n'
-            f'Be specific. Do not give a final verdict yet.'
-        }]
-    )
-    post_analysis = r1.choices[0].message.content.strip()
-
-    r2 = _llm.chat.completions.create(
-        model=_MODEL, max_tokens=300, temperature=0.1,
-        messages=[{"role": "user", "content":
-            f'Analyze this author\'s posting history for suspicious patterns.\n\n'
-            f'AUTHOR: @{obs["post_author"]}\n'
-            f'CURRENT POST: "{obs["post_content"]}"\n'
-            f'PREVIOUS POSTS:\n{json.dumps(obs["previous_posts"], indent=2)}\n\n'
-            f'Answer:\n'
-            f'1. What recurring patterns exist in their posting history?\n'
-            f'2. Is the current post consistent or inconsistent with their history?\n'
-            f'3. Signs of escalating harm, coordinated agenda, or fake persona?\n\n'
-            f'Be specific.'
-        }]
-    )
-    history_analysis = r2.choices[0].message.content.strip()
-
-    r3 = _llm.chat.completions.create(
-        model=_MODEL, max_tokens=700, temperature=0.1,
-        messages=[{"role": "user", "content":
-            f'You are making a final structured content moderation decision.\n\n'
-            f'POST AND RULES ANALYSIS:\n{post_analysis}\n\n'
-            f'AUTHOR HISTORY ANALYSIS:\n{history_analysis}\n\n'
-            f'Respond ONLY with valid JSON, no markdown:\n'
-            '{{\n'
-            '  "hallucination_detected": true or false,\n'
-            '  "hallucination_explanation": "specific explanation",\n'
-            '  "bias_detected": true or false,\n'
-            '  "bias_explanation": "specific explanation",\n'
-            '  "alignment_violated": true or false,\n'
-            '  "alignment_explanation": "which rules violated and why",\n'
-            '  "memory_consistent": true or false,\n'
-            '  "memory_explanation": "analysis of author history patterns",\n'
-            '  "overall_verdict": "safe" or "borderline" or "remove",\n'
-            '  "confidence": 0.0 to 1.0\n'
-            '}}'
-        }]
-    )
-    raw = r3.choices[0].message.content.strip().replace("```json", "").replace("```", "").strip()
-    result = json.loads(raw)
-
-    issues = sum([
-        result.get("hallucination_detected", False),
-        result.get("bias_detected", False),
-        result.get("alignment_violated", False),
-        not result.get("memory_consistent", True),
-    ])
-    base_conf = float(result.get("confidence", 0.72))
-    if issues >= 3:
-        result["confidence"] = round(min(base_conf, 0.80), 2)
-    elif issues == 0:
-        result["confidence"] = round(max(base_conf, 0.65), 2)
-    else:
-        result["confidence"] = round(min(base_conf, 0.82), 2)
-
-    return result
 
 
 # ── OpenEnv Required Endpoints ────────────────────────────────────────────────
@@ -151,51 +57,6 @@ def state():
 @app.get("/health")
 def health():
     return {"status": "ok", "env": "social-media-auditor-env"}
-
-
-@app.post("/run_full")
-def run_full():
-    """
-    Runs a complete episode using the internal multi-turn LLM agent.
-    Returns all step results including per-step breakdown and agent reasoning.
-    """
-    obs = env.reset().model_dump()
-    results = []
-    last_info = {}
-
-    while True:
-        if obs.get("task_id") == "done":
-            break
-        try:
-            if results:          # skip delay on first step
-                time.sleep(4)    # 4s between steps → 3 LLM calls per step stays under 30 RPM
-            action_dict = _agent_audit(obs)
-            action = AuditAction(**action_dict)
-            obs_model, reward, done, info = env.step(action)
-            obs = obs_model.model_dump()
-            last_info = info
-
-            results.append({
-              "task": info.get("task_completed", obs.get("task_id", "unknown")),
-                "reward": reward,
-              "breakdown": info.get("breakdown", {}),
-                "action": action_dict,
-              "total_reward_so_far": info.get("total_reward_so_far", 0.001),
-            })
-
-            if done:
-                break
-        except Exception as e:
-            results.append({"error": str(e), "task": obs.get("task_id", "unknown")})
-            break
-
-    total = last_info.get("total_reward_so_far", 0.001)
-    return {
-        "results": results,
-        "total_reward": total,
-        "steps": len(results),
-      "avg_reward": round(total / max(len(results), 1), 3),
-    }
 
 
 # ── Web UI ─────────────────────────────────────────────────────────────────────
@@ -990,17 +851,6 @@ def ui():
 
 <div class="container">
 
-  <!-- Full Episode Runner -->
-  <div class="card-glass">
-    <div class="section-title">🤖 Full Episode Runner</div>
-    <p class="run-desc">Runs a complete 3-task episode with the built-in multi-turn LLM agent. Each task gets <code>3 reasoning turns</code> before a structured verdict is submitted. Task order is randomized each run.</p>
-    <button class="btn-run" id="run-btn" onclick="runFullEpisode()">
-      <span id="run-icon">&#9654;</span> Run Full Episode
-    </button>
-    <div id="runner-steps"></div>
-    <div id="runner-summary"></div>
-  </div>
-
   <!-- Manual Tester -->
   <div class="card">
     <div class="section-title">🧪 Manual API Tester</div>
@@ -1061,7 +911,6 @@ def ui():
     <div class="ep-grid">
       <div class="ep-item"><div class="ep-method">POST</div><div class="ep-path">/reset</div><div class="ep-desc">Start new episode, receive first AuditObservation</div></div>
       <div class="ep-item"><div class="ep-method">POST</div><div class="ep-path">/step</div><div class="ep-desc">Submit AuditAction → reward + observation + info</div></div>
-      <div class="ep-item"><div class="ep-method">POST</div><div class="ep-path">/run_full</div><div class="ep-desc">Run complete episode with internal LLM agent</div></div>
       <div class="ep-item"><div class="ep-method">GET</div><div class="ep-path">/state</div><div class="ep-desc">Current episode state + cumulative rewards</div></div>
       <div class="ep-item"><div class="ep-method">GET</div><div class="ep-path">/health</div><div class="ep-desc">Service health check</div></div>
       <div class="ep-item" style="background:transparent;border-style:dashed;display:flex;align-items:center;justify-content:center;">
@@ -1085,101 +934,11 @@ def ui():
 </footer>
 
 <script>
-const DIFF_COLORS = {
-  easy:'#34d399', medium:'#fbbf24', hard:'#f87171'
-};
 const DIM_COLORS = {
   hallucination:'#f87171', bias:'#fbbf24', alignment:'#c084fc', memory:'#38bdf8', verdict:'#34d399'
 };
 
 let manualReward = 0, manualSteps = 0;
-
-async function runFullEpisode() {
-  const btn = document.getElementById('run-btn');
-  const icon = document.getElementById('run-icon');
-  const stepsEl = document.getElementById('runner-steps');
-  const summaryEl = document.getElementById('runner-summary');
-
-  btn.disabled = true;
-  icon.className = 'spin';
-  icon.textContent = '\u21f3';
-  stepsEl.innerHTML = '<div style="color:#5c5c8a;font-family:monospace;font-size:12px;padding:12px 0">Dispatching tasks to LLM agent \u2014 allow ~60\u201390s...</div>';
-  summaryEl.innerHTML = '';
-
-  try {
-    const r = await fetch('/run_full', { method: 'POST' });
-    const data = await r.json();
-    stepsEl.innerHTML = '';
-    for (let i = 0; i < data.results.length; i++) {
-      await sleep(180);
-      renderStepCard(data.results[i], i + 1, stepsEl);
-    }
-    await sleep(400);
-    renderEpisodeSummary(data, summaryEl);
-  } catch(e) {
-    stepsEl.innerHTML = '<div style="color:#f87171;font-family:monospace;font-size:12px;padding:12px">[ERROR] ' + e.message + '</div>';
-  }
-
-  btn.disabled = false;
-  icon.className = '';
-  icon.textContent = '\u25b6';
-}
-
-function renderStepCard(step, num, container) {
-  if (step.error) {
-    container.insertAdjacentHTML('beforeend',
-      '<div class="step-card" style="border-color:rgba(248,113,113,0.3)"><span style="font-family:monospace;font-size:11px;color:#f87171">[STEP ' + num + ' ERROR] ' + step.error + '</span></div>');
-    return;
-  }
-  const bd = step.breakdown || {};
-  const pct = Math.round((step.reward / 1.0) * 100);
-  const taskColor = DIFF_COLORS[step.task] || '#a78bfa';
-  const action = step.action || {};
-  const verdictClass = {remove:'vt-remove', borderline:'vt-borderline', safe:'vt-safe'}[action.overall_verdict] || '';
-  const flags = [
-    action.hallucination_detected ? '<span class="sf sf-yes">\ud83e\udd25 Hall.</span>' : '<span class="sf sf-no">\u2713 Hall.</span>',
-    action.bias_detected          ? '<span class="sf sf-yes">\u2696\ufe0f Bias</span>' : '<span class="sf sf-no">\u2713 Bias</span>',
-    action.alignment_violated     ? '<span class="sf sf-yes">\ud83d\udccb Rules</span>' : '<span class="sf sf-no">\u2713 Rules</span>',
-    !action.memory_consistent     ? '<span class="sf sf-yes">\ud83e\udde0 Mem.</span>' : '<span class="sf sf-no">\u2713 Mem.</span>',
-  ].join('');
-
-  const dimHtml = ['hallucination','bias','alignment','memory','verdict'].map(function(d) {
-    return '<div class="sc-dim"><div class="sc-dim-val" style="color:' + DIM_COLORS[d] + '">' + (bd[d]||0).toFixed(2) + '</div><div class="sc-dim-key">' + d.slice(0,5) + '</div></div>';
-  }).join('');
-
-  container.insertAdjacentHTML('beforeend',
-    '<div class="step-card">' +
-    '<div class="sc-top">' +
-    '<div><div class="sc-step-num">STEP ' + num + '</div><div class="sc-task" style="color:' + taskColor + '">' + step.task.toUpperCase() + '</div></div>' +
-    '<div class="sc-reward"><div class="sc-reward-num">' + step.reward.toFixed(3) + '</div><div class="sc-reward-of">/ 1.000</div></div>' +
-    '</div>' +
-    '<div class="sc-bar"><div class="sc-bar-fill" style="width:' + pct + '%"></div></div>' +
-    '<div class="sc-dims">' + dimHtml + '</div>' +
-    '<div class="sc-bottom"><div class="sc-flags">' + flags + '</div><span class="verdict-tag ' + verdictClass + '">' + (action.overall_verdict||'').toUpperCase() + '</span></div>' +
-    '</div>'
-  );
-}
-
-function renderEpisodeSummary(data, container) {
-  const pct = Math.round((data.total_reward / 3.0) * 100);
-  const dimMax = { hallucination:0.75, bias:0.75, alignment:0.75, memory:0.45, verdict:0.30 };
-  const dimTotals = {};
-  for (const step of data.results) {
-    const bd = step.breakdown || {};
-    for (const d of Object.keys(dimMax)) {
-      dimTotals[d] = (dimTotals[d] || 0) + (bd[d] || 0);
-    }
-  }
-  let dimRows = '';
-  for (const [d, max] of Object.entries(dimMax)) {
-    const val = (dimTotals[d] || 0);
-    const barPct = Math.round((val / max) * 100);
-    dimRows += '<div class="ep-dim-row"><div class="ep-dim-name">' + d + '</div><div class="ep-dim-track"><div class="ep-dim-fill" style="width:' + barPct + '%;background:' + DIM_COLORS[d] + '"></div></div><div class="ep-dim-score">' + val.toFixed(3) + '</div></div>';
-  }
-  container.innerHTML = '<div class="ep-card"><div class="ep-total-row"><div class="ep-total-num">' + data.total_reward.toFixed(3) + '</div><div class="ep-total-meta">Total Episode Reward<br>' + pct + '% of maximum \u00b7 ' + data.avg_reward + ' avg/step</div></div>' + dimRows + '</div>';
-}
-
-function sleep(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
 
 const log = function(msg, cls) {
   cls = cls || 'ok';
