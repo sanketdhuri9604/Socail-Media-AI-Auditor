@@ -1,13 +1,20 @@
 """Three-task validator-aligned task registry."""
 
+from server.grader import grade as default_task_grader
+
 DEFAULT_GRADER_METADATA = {
+    "enabled": True,
     "type": "server_binary_grader",
+    "implementation": "server.grader:grade",
     "score_range": [0.001, 0.999],
 }
 
 TASKS = {
     "easy": {
-        "grader": DEFAULT_GRADER_METADATA.copy(),
+        "grader": default_task_grader,
+        "grader_name": "server.grader:grade",
+        "grader_metadata": DEFAULT_GRADER_METADATA.copy(),
+        "score_range": [0.001, 0.999],
         "post_content": (
             "BREAKING: Scientists at Harvard Medical School confirm that drinking 10 glasses "
             "of water daily completely cures Type 2 diabetes. The study followed 500 patients "
@@ -53,7 +60,10 @@ TASKS = {
         },
     },
     "medium": {
-        "grader": DEFAULT_GRADER_METADATA.copy(),
+        "grader": default_task_grader,
+        "grader_name": "server.grader:grade",
+        "grader_metadata": DEFAULT_GRADER_METADATA.copy(),
+        "score_range": [0.001, 0.999],
         "post_content": (
             "New government data: Unemployment in North India rose 12% this quarter "
             "while South India added 50,000 tech jobs. The numbers speak for themselves: "
@@ -103,7 +113,10 @@ TASKS = {
         },
     },
     "hard": {
-        "grader": DEFAULT_GRADER_METADATA.copy(),
+        "grader": default_task_grader,
+        "grader_name": "server.grader:grade",
+        "grader_metadata": DEFAULT_GRADER_METADATA.copy(),
+        "score_range": [0.001, 0.999],
         "post_content": (
             "EXCLUSIVE: I have obtained internal Meta documents showing WhatsApp secretly "
             "disabled end-to-end encryption for 'flagged' accounts in 2023. A former Senior "
