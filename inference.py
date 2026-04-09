@@ -142,7 +142,10 @@ def _task_result_from_step_payload(step_payload: dict, source: str) -> dict:
         "id": task_id,
         "task_id": task_id,
         "grader": grader,
+        "graders": [grader],
         "score": score,
+        "task_score": score,
+        "grader_score": score,
         "source": source,
     }
 
@@ -156,13 +159,11 @@ def _canonical_validator_tasks(task_results: list[dict]) -> list[dict]:
         output.append({
             "id": task_id,
             "task_id": task_id,
-            "grader": {
-                "id": grader_name,
-                "name": grader_name,
-                "score": score,
-            },
-            "grader_name": grader_name,
+            "grader": grader_name,
+            "graders": [grader_name],
             "score": score,
+            "task_score": score,
+            "grader_score": score,
         })
     return output
 
@@ -582,7 +583,10 @@ def main():
         ordered_results = _ordered_unique_task_results(task_results)
         canonical_tasks = _canonical_validator_tasks(ordered_results)
         task_scores = [item["score"] for item in canonical_tasks]
-        tasks_with_graders = sum(1 for item in canonical_tasks if item.get("grader"))
+        tasks_with_graders = sum(
+            1 for item in canonical_tasks
+            if isinstance(item.get("graders"), list) and len(item.get("graders", [])) > 0
+        )
         elapsed = round(time.time() - start_time, 2)
         norm_total = _normalize_total(total_reward, max(step_num, 1))
 
@@ -665,7 +669,10 @@ def main():
     ordered_results = _ordered_unique_task_results(task_results)
     canonical_tasks = _canonical_validator_tasks(ordered_results)
     task_scores = [item["score"] for item in canonical_tasks]
-    tasks_with_graders = sum(1 for item in canonical_tasks if item.get("grader"))
+    tasks_with_graders = sum(
+        1 for item in canonical_tasks
+        if isinstance(item.get("graders"), list) and len(item.get("graders", [])) > 0
+    )
 
     elapsed = round(time.time() - start_time, 2)
     norm_total = _normalize_total(total_reward, max(step_num, 1))
