@@ -6,14 +6,17 @@ DEFAULT_GRADER_METADATA = {
     "enabled": True,
     "type": "server_binary_grader",
     "implementation": "server.grader:grade",
+    "score": 0.5,
     "score_range": [0.001, 0.999],
 }
 
 TASKS = {
     "easy": {
-        "grader": default_task_grader,
+        "grader": DEFAULT_GRADER_METADATA.copy(),
+        "grader_fn": default_task_grader,
         "grader_name": "server.grader:grade",
         "grader_metadata": DEFAULT_GRADER_METADATA.copy(),
+        "score": 0.5,
         "score_range": [0.001, 0.999],
         "post_content": (
             "BREAKING: Scientists at Harvard Medical School confirm that drinking 10 glasses "
@@ -60,9 +63,11 @@ TASKS = {
         },
     },
     "medium": {
-        "grader": default_task_grader,
+        "grader": DEFAULT_GRADER_METADATA.copy(),
+        "grader_fn": default_task_grader,
         "grader_name": "server.grader:grade",
         "grader_metadata": DEFAULT_GRADER_METADATA.copy(),
+        "score": 0.5,
         "score_range": [0.001, 0.999],
         "post_content": (
             "New government data: Unemployment in North India rose 12% this quarter "
@@ -113,9 +118,11 @@ TASKS = {
         },
     },
     "hard": {
-        "grader": default_task_grader,
+        "grader": DEFAULT_GRADER_METADATA.copy(),
+        "grader_fn": default_task_grader,
         "grader_name": "server.grader:grade",
         "grader_metadata": DEFAULT_GRADER_METADATA.copy(),
+        "score": 0.5,
         "score_range": [0.001, 0.999],
         "post_content": (
             "EXCLUSIVE: I have obtained internal Meta documents showing WhatsApp secretly "
