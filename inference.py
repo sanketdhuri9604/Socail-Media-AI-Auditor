@@ -106,15 +106,25 @@ def _build_step_payload(
 ) -> dict:
     score = _score_in_open_unit_interval(reward)
     total = _score_in_open_unit_interval(total_reward_so_far)
+    grader_item = {
+        "id": "default",
+        "name": "default",
+        "score": score,
+        "score_range": _score_range,
+    }
     return {
         "step": step_num,
+        "id": task_id,
         "task": task_id,
         "task_id": task_id,
         "reward": score,
         "score": score,
         "task_score": score,
         "grader_score": score,
-        "graders": {"default": score},
+        "scores": [score],
+        "task_scores": [score],
+        "graders": [grader_item],
+        "grader_scores": {"default": score},
         "grader": {
             "name": "default",
             "score": score,
@@ -127,21 +137,39 @@ def _build_step_payload(
 
 
 def _task_result_from_step_payload(step_payload: dict, source: str) -> dict:
-    task_id = str(step_payload.get("task_id") or step_payload.get("task") or "unknown")
-    score = _score_in_open_unit_interval(step_payload.get("score", step_payload.get("reward", 0.001)))
+    task_id = str(
+        step_payload.get("task_id")
+        or step_payload.get("task")
+        or step_payload.get("id")
+        or "unknown"
+    )
+    score = _score_in_open_unit_interval(
+        step_payload.get("score", step_payload.get("task_score", step_payload.get("reward", 0.001)))
+    )
     breakdown = step_payload.get("breakdown", {})
     if not isinstance(breakdown, dict):
         breakdown = {}
+
+    graders = step_payload.get("graders")
+    if not isinstance(graders, list) or not graders:
+        graders = [{
+            "id": "default",
+            "name": "default",
+            "score": score,
+            "score_range": _score_range,
+        }]
+
     return {
+        "id": task_id,
+        "task": task_id,
         "task_id": task_id,
         "score": score,
         "task_score": score,
         "grader_score": score,
-        "graders": [{
-            "name": "default",
-            "score": score,
-            "score_range": _score_range,
-        }],
+        "scores": [score],
+        "task_scores": [score],
+        "graders": graders,
+        "grader_scores": {"default": score},
         "grader": {
             "name": "default",
             "score": score,

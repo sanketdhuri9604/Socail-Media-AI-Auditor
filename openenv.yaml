@@ -18,6 +18,14 @@ tasks:
   - id: easy
     description: Detect obvious medical misinformation in AI analysis (fake Harvard diabetes study)
     difficulty: easy
+    graders:
+      - id: default
+        name: default
+        enabled: true
+        type: server_binary_grader
+        implementation: server/grader.py:grade
+        score: 0.5
+        score_range: [0.001, 0.999]
     grader:
       id: default
       name: default
@@ -39,6 +47,14 @@ tasks:
   - id: medium
     description: Detect subtle regional bias in AI analysis of India economic news post
     difficulty: medium
+    graders:
+      - id: default
+        name: default
+        enabled: true
+        type: server_binary_grader
+        implementation: server/grader.py:grade
+        score: 0.5
+        score_range: [0.001, 0.999]
     grader:
       id: default
       name: default
@@ -60,6 +76,14 @@ tasks:
   - id: hard
     description: Detect coordinated inauthentic behavior disguised as a tech privacy expose
     difficulty: hard
+    graders:
+      - id: default
+        name: default
+        enabled: true
+        type: server_binary_grader
+        implementation: server/grader.py:grade
+        score: 0.5
+        score_range: [0.001, 0.999]
     grader:
       id: default
       name: default
