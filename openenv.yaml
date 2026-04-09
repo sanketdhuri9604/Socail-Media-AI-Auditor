@@ -1,51 +1,45 @@
 name: social-media-auditor-env
-version: 2.0.0
+version: 3.0.0
 description: >
-  An RL environment where agents audit AI-generated social media analysis
-  across 4 dimensions: hallucination, bias, alignment, and memory consistency.
-  3 progressive real-world scenarios spanning health, politics, and tech —
-  directly addressing Meta's core content moderation challenges.
-
+  Deterministic OpenEnv environment for auditing AI-generated social media analyses
+  across hallucination, bias, alignment, and memory dimensions.
 author: sanket
+
 graders:
   default:
     enabled: true
     type: server_binary_grader
     implementation: server/grader.py:grade
-    score: 0.5
     score_range: [0.001, 0.999]
+
 tasks:
   - id: easy
-    description: Detect obvious medical misinformation in AI analysis (fake Harvard diabetes study)
+    description: Detect medical misinformation and policy violations.
     difficulty: easy
     grader: default
     graders: [default]
     grader_id: default
     grader_path: server/grader.py:grade
-    sample_score: 0.5
-    grader_score: 0.5
     score: 0.5
     score_range: [0.001, 0.999]
+
   - id: medium
-    description: Detect subtle regional bias in AI analysis of India economic news post
+    description: Detect subtle regional bias and divisive framing.
     difficulty: medium
     grader: default
     graders: [default]
     grader_id: default
     grader_path: server/grader.py:grade
-    sample_score: 0.5
-    grader_score: 0.5
     score: 0.5
     score_range: [0.001, 0.999]
+
   - id: hard
-    description: Detect coordinated inauthentic behavior disguised as a tech privacy expose
+    description: Detect coordinated unverified security leak narratives.
     difficulty: hard
     grader: default
     graders: [default]
     grader_id: default
     grader_path: server/grader.py:grade
-    sample_score: 0.5
-    grader_score: 0.5
     score: 0.5
     score_range: [0.001, 0.999]
 
@@ -72,16 +66,12 @@ observation_space:
     - previous_posts: list[str]
     - ai_analysis: str
     - platform_rules: list[str]
-    - task_id: str        # "done" signals episode termination
-    - difficulty: str     # easy|medium|hard|done
+    - task_id: str
+    - difficulty: str
     - step_number: int
-    - max_steps: int      # 3 fixed steps per episode
-    - reward: float       # latest step reward in (0,1), defaults to 0.001 on reset
+    - max_steps: int
+    - reward: float
     - done: bool
-
-done_condition: >
-  The episode terminates when task_id == "done" or done == true after completing
-  the fixed 3-task sequence (easy -> medium -> hard).
 
 reward_range: [0.001, 0.999]
 max_steps: 3
