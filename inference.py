@@ -35,6 +35,7 @@ MAX_LLM_CALLS_PER_RUN = int(os.environ.get("MAX_LLM_CALLS_PER_RUN", "6"))
 USE_TASK_PRIOR = os.environ.get("USE_TASK_PRIOR", "0") == "1"
 ENV_RESET_MAX_ATTEMPTS = int(os.environ.get("ENV_RESET_MAX_ATTEMPTS", "6"))
 ENV_RESET_RETRY_GAP = float(os.environ.get("ENV_RESET_RETRY_GAP", "2"))
+MINIMAL_END_PAYLOAD = os.environ.get("MINIMAL_END_PAYLOAD", "1") == "1"
 
 client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 _llm_timestamps = deque(maxlen=MAX_RPM + 2)
@@ -313,6 +314,34 @@ def _task_prior_action(obs: dict) -> dict | None:
     task_id = str(obs.get("task_id", "")).strip().lower()
     return _TASK_PRIOR_ACTIONS.get(task_id)
 
+
+def _build_end_payload(
+    *,
+    total_reward: float,
+    steps_completed: int,
+    rewards_per_step: list[float],
+    canonical_tasks: list[dict],
+    tasks_with_graders: int,
+    elapsed_seconds: float,
+    status: str,
+    error: str | None = None,
+) -> dict:
+    avg_reward = _normalize_total(total_reward, max(steps_completed, 1))
+    payload = {
+        "total_reward": avg_reward,
+        "steps_completed": steps_completed,
+        "rewards_per_step": rewards_per_step,
+        "task_scores": [item["score"] for item in canonical_tasks],
+        "tasks": canonical_tasks,
+        "tasks_with_graders": tasks_with_graders,
+        "avg_reward": avg_reward,
+        "elapsed_seconds": elapsed_seconds,
+        "status": status,
+    }
+    if not MINIMAL_END_PAYLOAD and error:
+        payload["error"] = error
+    return payload
+
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
 def reset_env():
@@ -582,26 +611,23 @@ def main():
         task_results.extend(supplemental_results)
         ordered_results = _ordered_unique_task_results(task_results)
         canonical_tasks = _canonical_validator_tasks(ordered_results)
-        task_scores = [item["score"] for item in canonical_tasks]
         tasks_with_graders = sum(
             1 for item in canonical_tasks
             if isinstance(item.get("graders"), list) and len(item.get("graders", [])) > 0
         )
         elapsed = round(time.time() - start_time, 2)
-        norm_total = _normalize_total(total_reward, max(step_num, 1))
+        end_payload = _build_end_payload(
+            total_reward=total_reward,
+            steps_completed=step_num,
+            rewards_per_step=episode_rewards,
+            canonical_tasks=canonical_tasks,
+            tasks_with_graders=tasks_with_graders,
+            elapsed_seconds=elapsed,
+            status="offline_success",
+            error=str(reset_err)[:300],
+        )
 
-        print("[END] " + json.dumps({
-            "total_reward": norm_total,
-            "steps_completed": step_num,
-            "rewards_per_step": episode_rewards,
-            "avg_reward": norm_total,
-            "task_scores": task_scores,
-            "tasks": canonical_tasks,
-            "tasks_with_graders": tasks_with_graders,
-            "elapsed_seconds": elapsed,
-            "status": "offline_success",
-            "error": str(reset_err)[:300],
-        }), flush=True)
+        print("[END] " + json.dumps(end_payload), flush=True)
         return
 
     done      = False
@@ -668,27 +694,24 @@ def main():
 
     ordered_results = _ordered_unique_task_results(task_results)
     canonical_tasks = _canonical_validator_tasks(ordered_results)
-    task_scores = [item["score"] for item in canonical_tasks]
     tasks_with_graders = sum(
         1 for item in canonical_tasks
         if isinstance(item.get("graders"), list) and len(item.get("graders", [])) > 0
     )
 
     elapsed = round(time.time() - start_time, 2)
-    norm_total = _normalize_total(total_reward, max(step_num, 1))
+    end_payload = _build_end_payload(
+        total_reward=total_reward,
+        steps_completed=step_num,
+        rewards_per_step=episode_rewards,
+        canonical_tasks=canonical_tasks,
+        tasks_with_graders=tasks_with_graders,
+        elapsed_seconds=elapsed,
+        status="success",
+    )
 
     # ── [END] — mandatory marker, validator scans stdout for this literal string ──
-    print("[END] " + json.dumps({
-        "total_reward": norm_total,
-        "steps_completed": step_num,
-        "rewards_per_step": episode_rewards,
-        "task_scores": task_scores,
-        "tasks": canonical_tasks,
-        "tasks_with_graders": tasks_with_graders,
-        "avg_reward": norm_total,
-        "elapsed_seconds": elapsed,
-        "status": "success",
-    }), flush=True)
+    print("[END] " + json.dumps(end_payload), flush=True)
 
 
 if __name__ == "__main__":

@@ -163,6 +163,7 @@ docker run -p 7860:7860 \
 | `MAX_RPM` | `24` | Client-side LLM throttle to stay under Groq RPM cap |
 | `MAX_LLM_CALLS_PER_RUN` | `6` | Hard call-budget guard for each `inference.py` run |
 | `USE_TASK_PRIOR` | `0` | Keep `0` for evaluator runs so LLM proxy calls are observable |
+| `MINIMAL_END_PAYLOAD` | `1` | Set `1` to emit strict minimal `[END]` schema for evaluator compatibility |
 
 ## Reproducibility Defaults
 
@@ -172,7 +173,7 @@ The environment now defaults to deterministic behavior for baseline reproducibil
 - Static task analyses (no reset-time LLM generation)
 - Deterministic baseline model settings (`temperature=0.0`)
 
-Per-task reward emitted by `step()` is strict binary in-range: `0.001` or `0.999`.
+Per-task reward emitted by `step()` is deterministic and in-range: `0.86` or `0.14`.
 
 To opt into stochastic episodes for stress testing:
 
