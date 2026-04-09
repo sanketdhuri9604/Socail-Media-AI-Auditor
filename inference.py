@@ -106,29 +106,26 @@ def _build_step_payload(
 ) -> dict:
     score = _score_in_open_unit_interval(reward)
     total = _score_in_open_unit_interval(total_reward_so_far)
-    grader_item = {
-        "id": "default",
-        "name": "default",
-        "score": score,
-        "score_range": _score_range,
-    }
+    grader_name = "default"
     return {
         "step": step_num,
         "id": task_id,
         "task": task_id,
         "task_id": task_id,
+        "grader": grader_name,
+        "graders": [grader_name],
         "reward": score,
         "score": score,
         "task_score": score,
         "grader_score": score,
         "scores": [score],
         "task_scores": [score],
-        "graders": [grader_item],
-        "grader_scores": {"default": score},
-        "grader": {
-            "name": "default",
-            "score": score,
-            "score_range": _score_range,
+        "grader_scores": {grader_name: score},
+        "grader_meta": {
+            grader_name: {
+                "score": score,
+                "score_range": _score_range,
+            }
         },
         "breakdown": breakdown or {},
         "total_reward_so_far": total,
@@ -150,34 +147,48 @@ def _task_result_from_step_payload(step_payload: dict, source: str) -> dict:
     if not isinstance(breakdown, dict):
         breakdown = {}
 
+    grader = step_payload.get("grader", "default")
+    if isinstance(grader, dict):
+        grader = str(grader.get("name", "default"))
+    elif isinstance(grader, list):
+        grader = str(grader[0]) if grader else "default"
+    elif not isinstance(grader, str):
+        grader = "default"
+
     graders = step_payload.get("graders")
     if not isinstance(graders, list) or not graders:
-        graders = [{
-            "id": "default",
-            "name": "default",
-            "score": score,
-            "score_range": _score_range,
-        }]
+        graders = [grader]
 
     return {
         "id": task_id,
         "task": task_id,
         "task_id": task_id,
+        "grader": grader,
+        "graders": graders,
         "score": score,
         "task_score": score,
         "grader_score": score,
         "scores": [score],
         "task_scores": [score],
-        "graders": graders,
-        "grader_scores": {"default": score},
-        "grader": {
-            "name": "default",
-            "score": score,
-            "score_range": _score_range,
-        },
+        "grader_scores": {grader: score},
         "breakdown": breakdown,
         "source": source,
     }
+
+
+def _canonical_validator_tasks(task_results: list[dict]) -> list[dict]:
+    output: list[dict] = []
+    for item in task_results:
+        task_id = str(item.get("task_id", item.get("id", "unknown")))
+        grader = str(item.get("grader", "default"))
+        score = _score_in_open_unit_interval(item.get("score", item.get("task_score", 0.5)))
+        output.append({
+            "id": task_id,
+            "task_id": task_id,
+            "grader": grader,
+            "score": score,
+        })
+    return output
 
 
 def _ordered_unique_task_results(task_results: list[dict]) -> list[dict]:
@@ -593,7 +604,7 @@ def main():
         )
         task_results.extend(supplemental_results)
         ordered_results = _ordered_unique_task_results(task_results)
-        task_scores = [
+        task_score_details = [
             {
                 "task_id": item["task_id"],
                 "score": item["score"],
@@ -601,6 +612,8 @@ def main():
             }
             for item in ordered_results
         ]
+        task_scores = [item["score"] for item in ordered_results]
+        canonical_tasks = _canonical_validator_tasks(ordered_results)
         tasks_with_graders = sum(1 for item in ordered_results if item.get("graders"))
         elapsed = round(time.time() - start_time, 2)
         norm_total = _normalize_total(total_reward, max(step_num, 1))
@@ -611,7 +624,8 @@ def main():
             "rewards_per_step": episode_rewards,
             "avg_reward": norm_total,
             "task_scores": task_scores,
-            "tasks": ordered_results,
+            "task_score_details": task_score_details,
+            "tasks": canonical_tasks,
             "task_results": ordered_results,
             "tasks_with_graders": tasks_with_graders,
             "scores": [item["score"] for item in ordered_results],
@@ -684,7 +698,7 @@ def main():
     task_results.extend(supplemental_results)
 
     ordered_results = _ordered_unique_task_results(task_results)
-    task_scores = [
+    task_score_details = [
         {
             "task_id": item["task_id"],
             "score": item["score"],
@@ -692,6 +706,8 @@ def main():
         }
         for item in ordered_results
     ]
+    task_scores = [item["score"] for item in ordered_results]
+    canonical_tasks = _canonical_validator_tasks(ordered_results)
     tasks_with_graders = sum(1 for item in ordered_results if item.get("graders"))
 
     elapsed = round(time.time() - start_time, 2)
@@ -703,7 +719,8 @@ def main():
         "steps_completed": step_num,
         "rewards_per_step": episode_rewards,
         "task_scores": task_scores,
-        "tasks": ordered_results,
+        "task_score_details": task_score_details,
+        "tasks": canonical_tasks,
         "task_results": ordered_results,
         "tasks_with_graders": tasks_with_graders,
         "scores": [item["score"] for item in ordered_results],

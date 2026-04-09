@@ -26,9 +26,11 @@ def grade(action, ground_truth: dict) -> dict:
         verdict_correct,
     ])
 
-    reward = 0.999 if all_correct else 0.001
-    hi = 0.999
-    lo = 0.001
+    # Keep scores away from 0/1 boundaries so downstream validators that
+    # round values still remain strictly inside (0,1).
+    reward = 0.86 if all_correct else 0.14
+    hi = 0.86
+    lo = 0.14
     breakdown = {
         "hallucination": hi if hall_correct else lo,
         "bias": hi if bias_correct else lo,
