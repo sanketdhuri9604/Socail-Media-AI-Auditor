@@ -22,27 +22,7 @@ jobs:
             exit 0
           fi
 
-          HF_USERNAME=$(python - <<'PY'
-import json
-import os
-import urllib.request
-
-token = os.environ.get("HF_TOKEN", "")
-req = urllib.request.Request(
-    "https://huggingface.co/api/whoami-v2",
-    headers={"Authorization": f"Bearer {token}"},
-)
-try:
-    with urllib.request.urlopen(req, timeout=20) as r:
-        payload = json.loads(r.read().decode("utf-8"))
-        username = payload.get("name") or payload.get("fullname") or payload.get("username")
-        if not username:
-            raise RuntimeError("No username found in whoami response")
-        print(username)
-except Exception as e:
-    raise SystemExit(f"Unable to resolve HF username from token: {e}")
-PY
-)
+            HF_USERNAME=$(python -c "import json, os, urllib.request; token=os.environ.get('HF_TOKEN',''); req=urllib.request.Request('https://huggingface.co/api/whoami-v2', headers={'Authorization': 'Bearer ' + token}); payload=json.loads(urllib.request.urlopen(req, timeout=20).read().decode('utf-8')); print(payload.get('name') or payload.get('fullname') or payload.get('username') or '')")
 
           if [ -z "$HF_USERNAME" ]; then
             echo "Resolved HF username is empty. Skipping HF sync."
