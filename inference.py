@@ -126,6 +126,88 @@ def _build_step_payload(
     }
 
 
+def _task_result_from_step_payload(step_payload: dict, source: str) -> dict:
+    task_id = str(step_payload.get("task_id") or step_payload.get("task") or "unknown")
+    score = _score_in_open_unit_interval(step_payload.get("score", step_payload.get("reward", 0.001)))
+    breakdown = step_payload.get("breakdown", {})
+    if not isinstance(breakdown, dict):
+        breakdown = {}
+    return {
+        "task_id": task_id,
+        "score": score,
+        "task_score": score,
+        "grader_score": score,
+        "graders": [{
+            "name": "default",
+            "score": score,
+            "score_range": _score_range,
+        }],
+        "grader": {
+            "name": "default",
+            "score": score,
+            "score_range": _score_range,
+        },
+        "breakdown": breakdown,
+        "source": source,
+    }
+
+
+def _ordered_unique_task_results(task_results: list[dict]) -> list[dict]:
+    result_map: dict[str, dict] = {}
+    insertion_order: list[str] = []
+
+    for item in task_results:
+        task_id = str(item.get("task_id", "unknown"))
+        if task_id not in result_map:
+            insertion_order.append(task_id)
+        result_map[task_id] = item
+
+    ordered_ids = [task_id for task_id in _DEFAULT_TASK_SEQUENCE if task_id in result_map]
+    ordered_ids.extend([task_id for task_id in insertion_order if task_id not in ordered_ids])
+    return [result_map[task_id] for task_id in ordered_ids]
+
+
+def _emit_missing_task_steps(
+    step_num: int,
+    total_reward: float,
+    episode_rewards: list[float],
+    seen_task_ids: set[str],
+) -> tuple[int, float, list[dict]]:
+    supplemental_results: list[dict] = []
+
+    for task_id in _DEFAULT_TASK_SEQUENCE:
+        if task_id in seen_task_ids:
+            continue
+
+        task = TASKS.get(task_id)
+        if not task:
+            continue
+
+        step_num += 1
+        step_start = time.time()
+
+        result = grade(_fallback_task_action(task_id), task["ground_truth"])
+        reward = _score_in_open_unit_interval(result.get("reward", 0.001))
+        breakdown = result.get("breakdown", {})
+
+        total_reward += reward
+        episode_rewards.append(reward)
+
+        total_so_far = _normalize_total(total_reward, len(_DEFAULT_TASK_SEQUENCE))
+        step_payload = _emit_step(
+            step_num=step_num,
+            task_id=task_id,
+            reward=reward,
+            breakdown=breakdown,
+            total_reward_so_far=total_so_far,
+            elapsed_seconds=time.time() - step_start,
+        )
+        supplemental_results.append(_task_result_from_step_payload(step_payload, source="supplemental"))
+        seen_task_ids.add(task_id)
+
+    return step_num, total_reward, supplemental_results
+
+
 def _emit_step(
     step_num: int,
     task_id: str,
@@ -154,7 +236,7 @@ def _fallback_task_action(task_id: str) -> AuditAction:
 def _run_offline_episode(episode_rewards: list[float]) -> tuple[int, float, list[dict]]:
     total_reward = 0.0
     step_num = 0
-    task_scores = []
+    task_results = []
 
     for task_id in _DEFAULT_TASK_SEQUENCE:
         task = TASKS.get(task_id)
@@ -180,18 +262,12 @@ def _run_offline_episode(episode_rewards: list[float]) -> tuple[int, float, list
             total_reward_so_far=total_so_far,
             elapsed_seconds=time.time() - step_start,
         )
-        task_scores.append(
-            {
-                "task_id": task_id,
-                "score": step_payload["score"],
-                "grader_score": step_payload["grader_score"],
-            }
-        )
+        task_results.append(_task_result_from_step_payload(step_payload, source="offline"))
 
         if step_num > 1:
             time.sleep(STEP_DELAY)
 
-    return step_num, total_reward, task_scores
+    return step_num, total_reward, task_results
 
 
 def _respect_rate_limit() -> bool:
@@ -443,7 +519,8 @@ def main():
     start_time = time.time()
 
     episode_rewards = []
-    task_scores = []
+    task_results = []
+    seen_task_ids: set[str] = set()
     key_source = (
         "API_KEY"
         if os.environ.get("API_KEY")
@@ -478,7 +555,25 @@ def main():
             "hint": "Env server unreachable; running local deterministic graders for all tasks.",
         }), flush=True)
 
-        step_num, total_reward, task_scores = _run_offline_episode(episode_rewards)
+        step_num, total_reward, task_results = _run_offline_episode(episode_rewards)
+        seen_task_ids.update(str(item.get("task_id", "")) for item in task_results)
+        step_num, total_reward, supplemental_results = _emit_missing_task_steps(
+            step_num=step_num,
+            total_reward=total_reward,
+            episode_rewards=episode_rewards,
+            seen_task_ids=seen_task_ids,
+        )
+        task_results.extend(supplemental_results)
+        ordered_results = _ordered_unique_task_results(task_results)
+        task_scores = [
+            {
+                "task_id": item["task_id"],
+                "score": item["score"],
+                "grader_score": item["grader_score"],
+            }
+            for item in ordered_results
+        ]
+        tasks_with_graders = sum(1 for item in ordered_results if item.get("graders"))
         elapsed = round(time.time() - start_time, 2)
         norm_total = _normalize_total(total_reward, max(step_num, 1))
 
@@ -488,6 +583,10 @@ def main():
             "rewards_per_step": episode_rewards,
             "avg_reward": norm_total,
             "task_scores": task_scores,
+            "tasks": ordered_results,
+            "task_results": ordered_results,
+            "tasks_with_graders": tasks_with_graders,
+            "scores": [item["score"] for item in ordered_results],
             "elapsed_seconds": elapsed,
             "status": "offline_success",
             "error": str(reset_err)[:300],
@@ -535,13 +634,8 @@ def main():
                 total_reward_so_far=total_so_far,
                 elapsed_seconds=time.time() - step_start,
             )
-            task_scores.append(
-                {
-                    "task_id": task_id,
-                    "score": step_payload["score"],
-                    "grader_score": step_payload["grader_score"],
-                }
-            )
+            task_results.append(_task_result_from_step_payload(step_payload, source="online"))
+            seen_task_ids.add(task_id)
 
         except Exception as step_err:
             # Log the error but continue — [END] must always be printed
@@ -553,6 +647,25 @@ def main():
             episode_rewards.append(0.001)
             break  # exit loop cleanly; [END] is printed below
 
+    step_num, total_reward, supplemental_results = _emit_missing_task_steps(
+        step_num=step_num,
+        total_reward=total_reward,
+        episode_rewards=episode_rewards,
+        seen_task_ids=seen_task_ids,
+    )
+    task_results.extend(supplemental_results)
+
+    ordered_results = _ordered_unique_task_results(task_results)
+    task_scores = [
+        {
+            "task_id": item["task_id"],
+            "score": item["score"],
+            "grader_score": item["grader_score"],
+        }
+        for item in ordered_results
+    ]
+    tasks_with_graders = sum(1 for item in ordered_results if item.get("graders"))
+
     elapsed = round(time.time() - start_time, 2)
     norm_total = _normalize_total(total_reward, max(step_num, 1))
 
@@ -562,6 +675,10 @@ def main():
         "steps_completed": step_num,
         "rewards_per_step": episode_rewards,
         "task_scores": task_scores,
+        "tasks": ordered_results,
+        "task_results": ordered_results,
+        "tasks_with_graders": tasks_with_graders,
+        "scores": [item["score"] for item in ordered_results],
         "avg_reward": norm_total,
         "elapsed_seconds": elapsed,
         "status": "success",
