@@ -23,6 +23,7 @@ tasks:
       name: default
       score: 0.5
       score_range: [0.001, 0.999]
+    graders: [default]
     grader_id: default
     grader_path: server/grader.py:grade
     sample_score: 0.5
@@ -37,6 +38,7 @@ tasks:
       name: default
       score: 0.5
       score_range: [0.001, 0.999]
+    graders: [default]
     grader_id: default
     grader_path: server/grader.py:grade
     sample_score: 0.5
@@ -51,6 +53,7 @@ tasks:
       name: default
       score: 0.5
       score_range: [0.001, 0.999]
+    graders: [default]
     grader_id: default
     grader_path: server/grader.py:grade
     sample_score: 0.5
