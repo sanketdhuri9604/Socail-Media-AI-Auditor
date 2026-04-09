@@ -40,14 +40,7 @@ client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 _llm_timestamps = deque(maxlen=MAX_RPM + 2)
 _llm_calls_made = 0
 _active_env_base_url = ENV_BASE_URL
-_score_range = [0.001, 0.999]
-_DEFAULT_GRADER_META = {
-    "id": "default",
-    "name": "default",
-    "enabled": True,
-    "type": "server_binary_grader",
-    "implementation": "server/grader.py:grade",
-}
+_DEFAULT_GRADER_NAME = "default"
 
 _TASK_PRIOR_ACTIONS = {
     "easy": {
@@ -103,15 +96,6 @@ def _normalize_total(total_reward: float, max_steps: int) -> float:
     return _score_in_open_unit_interval(total_reward / max(max_steps, 1))
 
 
-def _grader_detail(score: float, grader_name: str = "default") -> dict:
-    detail = _DEFAULT_GRADER_META.copy()
-    detail["id"] = grader_name
-    detail["name"] = grader_name
-    detail["score"] = _score_in_open_unit_interval(score)
-    detail["score_range"] = list(_score_range)
-    return detail
-
-
 def _build_step_payload(
     step_num: int,
     task_id: str,
@@ -122,30 +106,14 @@ def _build_step_payload(
 ) -> dict:
     score = _score_in_open_unit_interval(reward)
     total = _score_in_open_unit_interval(total_reward_so_far)
-    grader_name = "default"
-    grader_detail = _grader_detail(score, grader_name)
+    grader_name = _DEFAULT_GRADER_NAME
     return {
         "step": step_num,
         "id": task_id,
-        "task": task_id,
         "task_id": task_id,
         "grader": grader_name,
-        "grader_id": grader_name,
-        "grader_name": grader_name,
-        "grader_detail": grader_detail,
-        "graders": [grader_name],
-        "graders_detail": [grader_detail],
-        "reward": score,
         "score": score,
-        "task_score": score,
-        "grader_score": score,
-        "scores": [score],
-        "task_scores": [score],
-        "grader_scores": {grader_name: score},
-        "grader_meta": {
-            grader_name: grader_detail,
-        },
-        "score_range": list(_score_range),
+        "reward": score,
         "breakdown": breakdown or {},
         "total_reward_so_far": total,
         "elapsed_seconds": round(elapsed_seconds, 2),
@@ -162,58 +130,19 @@ def _task_result_from_step_payload(step_payload: dict, source: str) -> dict:
     score = _score_in_open_unit_interval(
         step_payload.get("score", step_payload.get("task_score", step_payload.get("reward", 0.001)))
     )
-    breakdown = step_payload.get("breakdown", {})
-    if not isinstance(breakdown, dict):
-        breakdown = {}
-
-    grader = step_payload.get("grader", "default")
+    grader = step_payload.get("grader", _DEFAULT_GRADER_NAME)
     if isinstance(grader, dict):
-        grader = str(grader.get("name", "default"))
+        grader = str(grader.get("name", _DEFAULT_GRADER_NAME))
     elif isinstance(grader, list):
-        grader = str(grader[0]) if grader else "default"
+        grader = str(grader[0]) if grader else _DEFAULT_GRADER_NAME
     elif not isinstance(grader, str):
-        grader = "default"
-
-    graders = step_payload.get("graders")
-    if not isinstance(graders, list) or not graders:
-        graders = [grader]
-
-    grader_detail = step_payload.get("grader_detail")
-    if not isinstance(grader_detail, dict):
-        grader_detail = _grader_detail(score, grader)
-    else:
-        grader_detail = {
-            "id": str(grader_detail.get("id", grader)),
-            "name": str(grader_detail.get("name", grader)),
-            "enabled": bool(grader_detail.get("enabled", True)),
-            "type": str(grader_detail.get("type", "server_binary_grader")),
-            "implementation": str(grader_detail.get("implementation", "server/grader.py:grade")),
-            "score": _score_in_open_unit_interval(grader_detail.get("score", score)),
-            "score_range": list(grader_detail.get("score_range", _score_range)),
-        }
-
-    graders_detail = step_payload.get("graders_detail")
-    if not isinstance(graders_detail, list) or not graders_detail:
-        graders_detail = [grader_detail]
+        grader = _DEFAULT_GRADER_NAME
 
     return {
         "id": task_id,
-        "task": task_id,
         "task_id": task_id,
         "grader": grader,
-        "grader_id": grader,
-        "grader_name": grader,
-        "grader_detail": grader_detail,
-        "graders": graders,
-        "graders_detail": graders_detail,
         "score": score,
-        "task_score": score,
-        "grader_score": score,
-        "scores": [score],
-        "task_scores": [score],
-        "grader_scores": {grader: score},
-        "score_range": list(_score_range),
-        "breakdown": breakdown,
         "source": source,
     }
 
@@ -222,24 +151,18 @@ def _canonical_validator_tasks(task_results: list[dict]) -> list[dict]:
     output: list[dict] = []
     for item in task_results:
         task_id = str(item.get("task_id", item.get("id", "unknown")))
-        grader = str(item.get("grader", "default"))
-        score = _score_in_open_unit_interval(item.get("score", item.get("task_score", 0.5)))
-        grader_detail = item.get("grader_detail")
-        if not isinstance(grader_detail, dict):
-            grader_detail = _grader_detail(score, grader)
+        grader_name = str(item.get("grader", _DEFAULT_GRADER_NAME))
+        score = _score_in_open_unit_interval(item.get("score", 0.5))
         output.append({
             "id": task_id,
             "task_id": task_id,
-            "grader": grader,
-            "grader_id": grader,
-            "grader_name": grader,
-            "grader_detail": grader_detail,
-            "graders": [grader],
-            "graders_detail": [grader_detail],
+            "grader": {
+                "id": grader_name,
+                "name": grader_name,
+                "score": score,
+            },
+            "grader_name": grader_name,
             "score": score,
-            "task_score": score,
-            "grader_score": score,
-            "score_range": list(_score_range),
         })
     return output
 
@@ -657,17 +580,9 @@ def main():
         )
         task_results.extend(supplemental_results)
         ordered_results = _ordered_unique_task_results(task_results)
-        task_score_details = [
-            {
-                "task_id": item["task_id"],
-                "score": item["score"],
-                "grader_score": item["grader_score"],
-            }
-            for item in ordered_results
-        ]
-        task_scores = [item["score"] for item in ordered_results]
         canonical_tasks = _canonical_validator_tasks(ordered_results)
-        tasks_with_graders = sum(1 for item in ordered_results if item.get("graders"))
+        task_scores = [item["score"] for item in canonical_tasks]
+        tasks_with_graders = sum(1 for item in canonical_tasks if item.get("grader"))
         elapsed = round(time.time() - start_time, 2)
         norm_total = _normalize_total(total_reward, max(step_num, 1))
 
@@ -677,11 +592,8 @@ def main():
             "rewards_per_step": episode_rewards,
             "avg_reward": norm_total,
             "task_scores": task_scores,
-            "task_score_details": task_score_details,
             "tasks": canonical_tasks,
-            "task_results": ordered_results,
             "tasks_with_graders": tasks_with_graders,
-            "scores": [item["score"] for item in ordered_results],
             "elapsed_seconds": elapsed,
             "status": "offline_success",
             "error": str(reset_err)[:300],
@@ -751,17 +663,9 @@ def main():
     task_results.extend(supplemental_results)
 
     ordered_results = _ordered_unique_task_results(task_results)
-    task_score_details = [
-        {
-            "task_id": item["task_id"],
-            "score": item["score"],
-            "grader_score": item["grader_score"],
-        }
-        for item in ordered_results
-    ]
-    task_scores = [item["score"] for item in ordered_results]
     canonical_tasks = _canonical_validator_tasks(ordered_results)
-    tasks_with_graders = sum(1 for item in ordered_results if item.get("graders"))
+    task_scores = [item["score"] for item in canonical_tasks]
+    tasks_with_graders = sum(1 for item in canonical_tasks if item.get("grader"))
 
     elapsed = round(time.time() - start_time, 2)
     norm_total = _normalize_total(total_reward, max(step_num, 1))
@@ -772,11 +676,8 @@ def main():
         "steps_completed": step_num,
         "rewards_per_step": episode_rewards,
         "task_scores": task_scores,
-        "task_score_details": task_score_details,
         "tasks": canonical_tasks,
-        "task_results": ordered_results,
         "tasks_with_graders": tasks_with_graders,
-        "scores": [item["score"] for item in ordered_results],
         "avg_reward": norm_total,
         "elapsed_seconds": elapsed,
         "status": "success",

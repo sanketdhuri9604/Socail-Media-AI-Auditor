@@ -14,7 +14,7 @@ DEFAULT_GRADER_METADATA = {
 
 TASKS = {
     "easy": {
-        "grader": default_task_grader,
+        "grader": DEFAULT_GRADER_METADATA.copy(),
         "grader_fn": default_task_grader,
         "grader_id": "default",
         "grader_name": "default",
@@ -69,7 +69,7 @@ TASKS = {
         },
     },
     "medium": {
-        "grader": default_task_grader,
+        "grader": DEFAULT_GRADER_METADATA.copy(),
         "grader_fn": default_task_grader,
         "grader_id": "default",
         "grader_name": "default",
@@ -128,7 +128,7 @@ TASKS = {
         },
     },
     "hard": {
-        "grader": default_task_grader,
+        "grader": DEFAULT_GRADER_METADATA.copy(),
         "grader_fn": default_task_grader,
         "grader_id": "default",
         "grader_name": "default",
