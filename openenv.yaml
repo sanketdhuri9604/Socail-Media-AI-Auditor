@@ -18,88 +18,31 @@ tasks:
   - id: easy
     description: Detect obvious medical misinformation in AI analysis (fake Harvard diabetes study)
     difficulty: easy
-    graders:
-      - id: default
-        name: default
-        enabled: true
-        type: server_binary_grader
-        implementation: server/grader.py:grade
-        score: 0.5
-        score_range: [0.001, 0.999]
-    grader:
-      id: default
-      name: default
-      enabled: true
-      type: server_binary_grader
-      implementation: server/grader.py:grade
-      score: 0.5
-      score_range: [0.001, 0.999]
+    grader: default
     grader_id: default
-    grader_config:
-      enabled: true
-      type: server_binary_grader
-      implementation: server/grader.py:grade
-      score: 0.5
-      score_range: [0.001, 0.999]
+    grader_path: server/grader.py:grade
     sample_score: 0.5
+    grader_score: 0.5
     score: 0.5
     score_range: [0.001, 0.999]
   - id: medium
     description: Detect subtle regional bias in AI analysis of India economic news post
     difficulty: medium
-    graders:
-      - id: default
-        name: default
-        enabled: true
-        type: server_binary_grader
-        implementation: server/grader.py:grade
-        score: 0.5
-        score_range: [0.001, 0.999]
-    grader:
-      id: default
-      name: default
-      enabled: true
-      type: server_binary_grader
-      implementation: server/grader.py:grade
-      score: 0.5
-      score_range: [0.001, 0.999]
+    grader: default
     grader_id: default
-    grader_config:
-      enabled: true
-      type: server_binary_grader
-      implementation: server/grader.py:grade
-      score: 0.5
-      score_range: [0.001, 0.999]
+    grader_path: server/grader.py:grade
     sample_score: 0.5
+    grader_score: 0.5
     score: 0.5
     score_range: [0.001, 0.999]
   - id: hard
     description: Detect coordinated inauthentic behavior disguised as a tech privacy expose
     difficulty: hard
-    graders:
-      - id: default
-        name: default
-        enabled: true
-        type: server_binary_grader
-        implementation: server/grader.py:grade
-        score: 0.5
-        score_range: [0.001, 0.999]
-    grader:
-      id: default
-      name: default
-      enabled: true
-      type: server_binary_grader
-      implementation: server/grader.py:grade
-      score: 0.5
-      score_range: [0.001, 0.999]
+    grader: default
     grader_id: default
-    grader_config:
-      enabled: true
-      type: server_binary_grader
-      implementation: server/grader.py:grade
-      score: 0.5
-      score_range: [0.001, 0.999]
+    grader_path: server/grader.py:grade
     sample_score: 0.5
+    grader_score: 0.5
     score: 0.5
     score_range: [0.001, 0.999]
 

@@ -2,18 +2,9 @@
 
 from server.grader import grade as default_task_grader
 
-
-class HybridTaskGrader(dict):
-    """Callable + mapping grader wrapper for broad validator compatibility."""
-
-    def __init__(self, grader_fn, metadata: dict):
-        super().__init__(metadata)
-        self._grader_fn = grader_fn
-
-    def __call__(self, action, ground_truth: dict):
-        return self._grader_fn(action, ground_truth)
-
 DEFAULT_GRADER_METADATA = {
+    "id": "default",
+    "name": "default",
     "enabled": True,
     "type": "server_binary_grader",
     "implementation": "server.grader:grade",
@@ -23,11 +14,13 @@ DEFAULT_GRADER_METADATA = {
 
 TASKS = {
     "easy": {
-        "grader": HybridTaskGrader(default_task_grader, DEFAULT_GRADER_METADATA.copy()),
-        "grader_fn": default_task_grader,
-        "grader_name": "server.grader:grade",
+        "grader": default_task_grader,
+        "grader_id": "default",
+        "grader_name": "default",
+        "grader_path": "server.grader:grade",
         "grader_metadata": DEFAULT_GRADER_METADATA.copy(),
         "graders": [DEFAULT_GRADER_METADATA.copy()],
+        "grader_score": 0.5,
         "score": 0.5,
         "score_range": [0.001, 0.999],
         "post_content": (
@@ -75,11 +68,13 @@ TASKS = {
         },
     },
     "medium": {
-        "grader": HybridTaskGrader(default_task_grader, DEFAULT_GRADER_METADATA.copy()),
-        "grader_fn": default_task_grader,
-        "grader_name": "server.grader:grade",
+        "grader": default_task_grader,
+        "grader_id": "default",
+        "grader_name": "default",
+        "grader_path": "server.grader:grade",
         "grader_metadata": DEFAULT_GRADER_METADATA.copy(),
         "graders": [DEFAULT_GRADER_METADATA.copy()],
+        "grader_score": 0.5,
         "score": 0.5,
         "score_range": [0.001, 0.999],
         "post_content": (
@@ -131,11 +126,13 @@ TASKS = {
         },
     },
     "hard": {
-        "grader": HybridTaskGrader(default_task_grader, DEFAULT_GRADER_METADATA.copy()),
-        "grader_fn": default_task_grader,
-        "grader_name": "server.grader:grade",
+        "grader": default_task_grader,
+        "grader_id": "default",
+        "grader_name": "default",
+        "grader_path": "server.grader:grade",
         "grader_metadata": DEFAULT_GRADER_METADATA.copy(),
         "graders": [DEFAULT_GRADER_METADATA.copy()],
+        "grader_score": 0.5,
         "score": 0.5,
         "score_range": [0.001, 0.999],
         "post_content": (
