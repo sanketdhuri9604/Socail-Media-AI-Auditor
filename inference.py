@@ -41,6 +41,13 @@ _llm_timestamps = deque(maxlen=MAX_RPM + 2)
 _llm_calls_made = 0
 _active_env_base_url = ENV_BASE_URL
 _score_range = [0.001, 0.999]
+_DEFAULT_GRADER_META = {
+    "id": "default",
+    "name": "default",
+    "enabled": True,
+    "type": "server_binary_grader",
+    "implementation": "server/grader.py:grade",
+}
 
 _TASK_PRIOR_ACTIONS = {
     "easy": {
@@ -96,6 +103,15 @@ def _normalize_total(total_reward: float, max_steps: int) -> float:
     return _score_in_open_unit_interval(total_reward / max(max_steps, 1))
 
 
+def _grader_detail(score: float, grader_name: str = "default") -> dict:
+    detail = _DEFAULT_GRADER_META.copy()
+    detail["id"] = grader_name
+    detail["name"] = grader_name
+    detail["score"] = _score_in_open_unit_interval(score)
+    detail["score_range"] = list(_score_range)
+    return detail
+
+
 def _build_step_payload(
     step_num: int,
     task_id: str,
@@ -107,13 +123,18 @@ def _build_step_payload(
     score = _score_in_open_unit_interval(reward)
     total = _score_in_open_unit_interval(total_reward_so_far)
     grader_name = "default"
+    grader_detail = _grader_detail(score, grader_name)
     return {
         "step": step_num,
         "id": task_id,
         "task": task_id,
         "task_id": task_id,
         "grader": grader_name,
+        "grader_id": grader_name,
+        "grader_name": grader_name,
+        "grader_detail": grader_detail,
         "graders": [grader_name],
+        "graders_detail": [grader_detail],
         "reward": score,
         "score": score,
         "task_score": score,
@@ -122,11 +143,9 @@ def _build_step_payload(
         "task_scores": [score],
         "grader_scores": {grader_name: score},
         "grader_meta": {
-            grader_name: {
-                "score": score,
-                "score_range": _score_range,
-            }
+            grader_name: grader_detail,
         },
+        "score_range": list(_score_range),
         "breakdown": breakdown or {},
         "total_reward_so_far": total,
         "elapsed_seconds": round(elapsed_seconds, 2),
@@ -159,18 +178,41 @@ def _task_result_from_step_payload(step_payload: dict, source: str) -> dict:
     if not isinstance(graders, list) or not graders:
         graders = [grader]
 
+    grader_detail = step_payload.get("grader_detail")
+    if not isinstance(grader_detail, dict):
+        grader_detail = _grader_detail(score, grader)
+    else:
+        grader_detail = {
+            "id": str(grader_detail.get("id", grader)),
+            "name": str(grader_detail.get("name", grader)),
+            "enabled": bool(grader_detail.get("enabled", True)),
+            "type": str(grader_detail.get("type", "server_binary_grader")),
+            "implementation": str(grader_detail.get("implementation", "server/grader.py:grade")),
+            "score": _score_in_open_unit_interval(grader_detail.get("score", score)),
+            "score_range": list(grader_detail.get("score_range", _score_range)),
+        }
+
+    graders_detail = step_payload.get("graders_detail")
+    if not isinstance(graders_detail, list) or not graders_detail:
+        graders_detail = [grader_detail]
+
     return {
         "id": task_id,
         "task": task_id,
         "task_id": task_id,
         "grader": grader,
+        "grader_id": grader,
+        "grader_name": grader,
+        "grader_detail": grader_detail,
         "graders": graders,
+        "graders_detail": graders_detail,
         "score": score,
         "task_score": score,
         "grader_score": score,
         "scores": [score],
         "task_scores": [score],
         "grader_scores": {grader: score},
+        "score_range": list(_score_range),
         "breakdown": breakdown,
         "source": source,
     }
@@ -182,11 +224,22 @@ def _canonical_validator_tasks(task_results: list[dict]) -> list[dict]:
         task_id = str(item.get("task_id", item.get("id", "unknown")))
         grader = str(item.get("grader", "default"))
         score = _score_in_open_unit_interval(item.get("score", item.get("task_score", 0.5)))
+        grader_detail = item.get("grader_detail")
+        if not isinstance(grader_detail, dict):
+            grader_detail = _grader_detail(score, grader)
         output.append({
             "id": task_id,
             "task_id": task_id,
             "grader": grader,
+            "grader_id": grader,
+            "grader_name": grader,
+            "grader_detail": grader_detail,
+            "graders": [grader],
+            "graders_detail": [grader_detail],
             "score": score,
+            "task_score": score,
+            "grader_score": score,
+            "score_range": list(_score_range),
         })
     return output
 
