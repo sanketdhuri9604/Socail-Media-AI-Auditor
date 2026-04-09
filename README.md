@@ -1,3 +1,12 @@
+---
+title: Social Media AI Auditor Env
+emoji: 🔍
+colorFrom: blue
+colorTo: green
+sdk: docker
+pinned: false
+---
+
 # Social Media AI Auditor Env (Rebuilt Baseline)
 
 This repository has been rebuilt from scratch as a contract-first OpenEnv project
