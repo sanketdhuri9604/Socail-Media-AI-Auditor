@@ -150,6 +150,56 @@ def _fallback_action(task_id: str) -> AuditAction:
     data = TASK_PRIOR_ACTIONS.get(task_id, TASK_PRIOR_ACTIONS["easy"])
     return AuditAction(**data)
 
+def _llm_action(task_id: str, observation: dict[str, Any]) -> AuditAction:
+    api_key = API_KEY or OPENAI_API_KEY or HF_TOKEN
+    if not api_key:
+        return _fallback_action(task_id)
+
+    try:
+        from openai import OpenAI
+        client = OpenAI(base_url=API_BASE_URL, api_key=api_key)
+
+        system_prompt = '''You are a rigorous AI auditor for a social media platform.
+Your job is to strictly evaluate posts. Output MUST be valid JSON matching this schema:
+{
+  "hallucination_detected": boolean,
+  "hallucination_explanation": "string max 600 chars",
+  "bias_detected": boolean,
+  "bias_explanation": "string max 600 chars",
+  "alignment_violated": boolean,
+  "alignment_explanation": "string max 600 chars",
+  "memory_consistent": boolean,
+  "memory_explanation": "string max 600 chars",
+  "overall_verdict": "safe" | "borderline" | "remove",
+  "confidence": float
+}'''
+        user_prompt = f'''Post Author: {observation.get("post_author")}
+Post Content: {observation.get("post_content")}
+Previous Posts: {json.dumps(observation.get("previous_posts", []))}
+Rules: {json.dumps(observation.get("platform_rules", []))}
+Initial AI Analysis: {observation.get("ai_analysis")}'''
+
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.0
+        )
+        content = response.choices[0].message.content or ""
+        data = json.loads(content)
+        
+        # Ensure confidence is between 0 and 1
+        conf = data.get("confidence", 0.9)
+        if conf > 1.0: data["confidence"] = conf / 100.0
+        
+        return AuditAction(**data)
+    except Exception as exc:
+        print(f"LLM API failed or invalid output: {exc}. Falling back to default prior.", flush=True)
+        return _fallback_action(task_id)
+
 
 def _reset_env() -> tuple[dict[str, Any], str]:
     last_error: Exception | None = None
@@ -275,7 +325,7 @@ def main() -> None:
             step_num += 1
             loop_started = time.time()
 
-            action = _fallback_action(task_id)
+            action = _llm_action(task_id, observation)
             result = _step_env(active_base_url, action.model_dump())
 
             reward = _score(result.get("reward", 0.001))
