@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from server.grader import grade as default_task_grader
 
-DEFAULT_GRADER_NAME = "default"
+DEFAULT_GRADER_NAME = "server.grader:grade"
 TASK_SEQUENCE = ["easy", "medium", "hard"]
 
 DEFAULT_GRADER_METADATA = {

@@ -35,7 +35,7 @@ ENV_RESET_RETRY_GAP = float(os.environ.get("ENV_RESET_RETRY_GAP", "2"))
 STEP_DELAY = float(os.environ.get("STEP_DELAY", "0.5"))
 MINIMAL_END_PAYLOAD = os.environ.get("MINIMAL_END_PAYLOAD", "") == "1"
 
-DEFAULT_GRADER_NAME = "default"
+DEFAULT_GRADER_NAME = "server.grader:grade"
 EXPECTED_TASKS = [task_id for task_id in TASK_SEQUENCE if task_id in TASKS]
 ENV_BASE_URL_CANDIDATES = list(
     dict.fromkeys([ENV_BASE_URL, "http://localhost:7860", "http://localhost:8000"])
