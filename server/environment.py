@@ -101,7 +101,7 @@ class SocialMediaAuditorEnvironment(Environment):
             difficulty=task["difficulty"],
             step_number=self._state["step_count"],
             max_steps=len(TASK_SEQUENCE),
-            reward=0.001,
+            reward=0.01,
             done=False,
         )
 

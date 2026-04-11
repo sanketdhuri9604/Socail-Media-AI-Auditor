@@ -41,5 +41,5 @@ class AuditObservation(BaseModel):
     difficulty: str
     step_number: int
     max_steps: int
-    reward: float = Field(default=0.001, gt=0.0, lt=1.0)
+    reward: float = Field(default=0.01, gt=0.0, lt=1.0)
     done: bool = False

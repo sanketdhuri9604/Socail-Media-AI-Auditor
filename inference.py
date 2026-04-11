@@ -146,7 +146,7 @@ def _build_end_payload(
         "total_reward": avg_reward,
         "steps_completed": steps_completed,
         "rewards_per_step": rewards_per_step,
-        "task_scores": [_score(item.get("score", 0.001)) for item in tasks],
+        "task_scores": [_score(item.get("score", 0.01)) for item in tasks],
         "tasks": tasks,
         "tasks_with_graders": tasks_with_graders,
         "avg_reward": avg_reward,
@@ -304,7 +304,7 @@ def _emit_missing_tasks(
         started = time.time()
         task = TASKS[task_id]
         graded = grade(_fallback_action(task_id), task["ground_truth"])
-        reward = _score(graded.get("reward", 0.001))
+        reward = _score(graded.get("reward", 0.01))
 
         step_num += 1
         total_reward += reward
@@ -390,7 +390,7 @@ def main() -> None:
             action = _llm_action(task_id, observation)
             result = _step_env(active_base_url, action.model_dump())
 
-            reward = _score(result.get("reward", 0.001))
+            reward = _score(result.get("reward", 0.01))
             info = result.get("info", {}) if isinstance(result.get("info"), dict) else {}
             breakdown = info.get("breakdown", {}) if isinstance(info.get("breakdown"), dict) else {}
             completed_task = str(info.get("task_completed", task_id))

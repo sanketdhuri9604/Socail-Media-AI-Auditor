@@ -227,7 +227,7 @@ def run_single_task(task_id: str):
     task = TASKS[task_id]
     action, source = _action_for_task(task_id)
     result = grade(action, task["ground_truth"])
-    reward = round(max(0.001, min(0.999, result["reward"])), 3)
+    reward = round(max(0.01, min(0.99, result["reward"])), 3)
 
     return {
         "status": "success",

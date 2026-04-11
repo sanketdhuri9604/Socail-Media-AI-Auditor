@@ -1,5 +1,9 @@
+spec_version: 1
 name: social-media-auditor-env
-version: 5.0.0
+type: space
+runtime: fastapi
+app: server.app:app
+port: 7860
 description: >
   OpenEnv-compatible RL environment for auditing AI-generated social media
   moderation outputs. Agents evaluate posts across hallucination, bias,
