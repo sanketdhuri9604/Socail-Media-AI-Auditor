@@ -69,7 +69,7 @@ def _explanation_quality(explanation: str, expected_reason: str) -> float:
     return round(max(0.1, overlap * 1.5), 3)
 
 
-def grade(action: AuditAction, ground_truth: dict) -> dict:
+def grade_detailed(action: AuditAction, ground_truth: dict) -> dict:
     """
     Grade an audit action with BOTH boolean accuracy AND explanation quality.
 
@@ -157,3 +157,7 @@ def grade(action: AuditAction, ground_truth: dict) -> dict:
     breakdown["total"] = reward
 
     return {"reward": reward, "breakdown": breakdown}
+
+def grade(action: AuditAction, ground_truth: dict[str, Any]) -> float:
+    """Entry point for OpenEnv platform validation."""
+    return grade_detailed(action, ground_truth)["reward"]

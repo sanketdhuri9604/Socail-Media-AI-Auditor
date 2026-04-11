@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from models import AuditAction, AuditObservation
-from server.grader import grade
+from server.grader import grade_detailed, grade
 from server.tasks import TASKS
 
 ROOT = Path(__file__).resolve().parent
@@ -143,7 +143,7 @@ def run() -> int:
             overall_verdict=gt["verdict"],
             confidence=0.7,
         )
-        result = grade(action, gt)
+        result = grade_detailed(action, gt)
         perfect_scores[task_id] = result["reward"]
         perfect_breakdowns[task_id] = result["breakdown"]
 
@@ -181,7 +181,7 @@ def run() -> int:
         confidence=0.95,
     )
     fixed_scores = {
-        task_id: grade(fixed_action, task["ground_truth"])["reward"]
+        task_id: grade(fixed_action, task["ground_truth"])
         for task_id, task in TASKS.items()
     }
     checks.append(

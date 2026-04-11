@@ -7,7 +7,7 @@ from typing import Any
 from openenv_core.env_server import Environment
 
 from models import AuditAction, AuditObservation
-from server.grader import grade
+from server.grader import grade_detailed
 from server.tasks import TASKS, TASK_SEQUENCE
 
 
@@ -40,7 +40,7 @@ class SocialMediaAuditorEnvironment(Environment):
         task_id = self._state["task_order"][self._state["task_index"]]
         task = TASKS[task_id]
 
-        graded = grade(action, task["ground_truth"])
+        graded = grade_detailed(action, task["ground_truth"])
         reward = _clamp_score(graded["reward"])
         breakdown = graded["breakdown"]
 

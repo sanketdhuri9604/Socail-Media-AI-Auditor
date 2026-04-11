@@ -11,7 +11,7 @@ from fastapi.responses import HTMLResponse
 from models import AuditAction
 from server.environment import SocialMediaAuditorEnvironment
 from server.tasks import TASK_SEQUENCE, TASKS
-from server.grader import grade
+from server.grader import grade_detailed
 
 # ── Load .env ──
 try:
@@ -226,7 +226,7 @@ def run_single_task(task_id: str):
 
     task = TASKS[task_id]
     action, source = _action_for_task(task_id)
-    result = grade(action, task["ground_truth"])
+    result = grade_detailed(action, task["ground_truth"])
     reward = round(max(0.01, min(0.99, result["reward"])), 3)
 
     return {

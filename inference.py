@@ -20,7 +20,7 @@ except ImportError:
 import requests
 
 from models import AuditAction
-from server.grader import grade
+from server.grader import grade_detailed
 from server.tasks import TASKS, TASK_SEQUENCE
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.groq.com/openai/v1")
@@ -303,7 +303,7 @@ def _emit_missing_tasks(
 
         started = time.time()
         task = TASKS[task_id]
-        graded = grade(_fallback_action(task_id), task["ground_truth"])
+        graded = grade_detailed(_fallback_action(task_id), task["ground_truth"])
         reward = _score(graded.get("reward", 0.01))
 
         step_num += 1

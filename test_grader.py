@@ -1,8 +1,7 @@
 """Quick test to verify grader math passes validator checks."""
 from models import AuditAction
-from server.grader import grade
+from server.grader import grade_detailed
 from server.tasks import TASKS
-
 
 def test_perfect_scores():
     print("=== PERFECT SCORES (all correct, matching explanations) ===")
@@ -21,7 +20,7 @@ def test_perfect_scores():
             overall_verdict=gt["verdict"],
             confidence=0.7,
         )
-        result = grade(action, gt)
+        result = grade_detailed(action, gt)
         reward = result["reward"]
         in_range = 0.0 < reward < 1.0
         print(f"  {task_id}: reward={reward}  in_range={in_range}")
