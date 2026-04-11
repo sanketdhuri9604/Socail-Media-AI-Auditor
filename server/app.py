@@ -196,7 +196,6 @@ def health():
         "status": "ok",
         "env": "social-media-auditor-env",
         "llm_enabled": bool(api_key),
-        "model": MODEL_NAME if api_key else "none",
     }
 
 
@@ -457,7 +456,20 @@ _DASHBOARD_HTML = r"""<!doctype html>
       <pre id="raw"></pre>
     </div>
 
-    <!-- ═══════ TASK BROWSER PANEL (second) ═══════ -->
+    <!-- ═══════ API ENDPOINTS PANEL ═══════ -->
+    <div class="panel">
+      <div class="panel-title"><span class="icon">🔌</span> API Endpoints</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:16px">
+        <button class="btn btn-sm btn-outline" onclick="apiCall('GET','/health')">GET /health</button>
+        <button class="btn btn-sm btn-outline" onclick="apiCall('GET','/state')">GET /state</button>
+        <button class="btn btn-sm btn-outline" onclick="apiCall('POST','/reset')">POST /reset</button>
+        <button class="btn btn-sm btn-outline" onclick="apiCall('GET','/tasks_info')">GET /tasks_info</button>
+        <button class="btn btn-sm btn-outline" onclick="window.open('/docs','_blank')">📄 API Docs (Swagger)</button>
+      </div>
+      <pre id="api-result" style="display:none;max-height:300px">Click an endpoint above to see live response</pre>
+    </div>
+
+    <!-- ═══════ TASK BROWSER PANEL ═══════ -->
     <div class="panel" id="task-panel">
       <div class="panel-title"><span class="icon">📋</span> Task Browser</div>
       <div class="tabs" id="task-tabs"></div>
@@ -618,10 +630,10 @@ async function apiCall(method,path){
 fetch('/health').then(r=>r.json()).then(d=>{
   const badge=document.getElementById('llm-badge');
   if(d.llm_enabled){
-    badge.textContent='🤖 LLM: '+d.model;
+    badge.textContent='🤖 LLM Powered';
     badge.style.background='rgba(16,185,129,.12)';badge.style.color='var(--success)';
   }else{
-    badge.textContent='📋 Baseline (no API key)';
+    badge.textContent='📋 Baseline';
     badge.style.background='rgba(245,158,11,.12)';badge.style.color='var(--warning)';
   }
 }).catch(()=>{});
