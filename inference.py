@@ -152,7 +152,7 @@ def _fallback_action(task_id: str) -> AuditAction:
 
 def _llm_action(task_id: str, observation: dict[str, Any]) -> AuditAction:
     """Use an OpenAI-compatible LLM to generate an audit action for the given task."""
-    api_key = API_KEY or OPENAI_API_KEY or HF_TOKEN
+    api_key = HF_TOKEN or API_KEY or OPENAI_API_KEY
     if not api_key:
         return _fallback_action(task_id)
 
@@ -324,9 +324,9 @@ def main() -> None:
     seen_tasks: set[str] = set()
 
     key_source = (
-        "API_KEY"
-        if API_KEY
-        else ("HF_TOKEN" if HF_TOKEN else ("OPENAI_API_KEY" if OPENAI_API_KEY else "none"))
+        "HF_TOKEN"
+        if HF_TOKEN
+        else ("API_KEY" if API_KEY else ("OPENAI_API_KEY" if OPENAI_API_KEY else "none"))
     )
 
     print(
@@ -337,7 +337,7 @@ def main() -> None:
                 "model": MODEL_NAME,
                 "api_base": API_BASE_URL,
                 "key_source": key_source,
-                "llm_enabled": bool(API_KEY or HF_TOKEN or OPENAI_API_KEY),
+                "llm_enabled": bool(HF_TOKEN or API_KEY or OPENAI_API_KEY),
                 "task_prior": True,
                 "env_url": ENV_BASE_URL,
                 "env_url_candidates": ENV_BASE_URL_CANDIDATES,
