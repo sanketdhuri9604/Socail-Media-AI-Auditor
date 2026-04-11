@@ -151,53 +151,94 @@ def _fallback_action(task_id: str) -> AuditAction:
     return AuditAction(**data)
 
 def _llm_action(task_id: str, observation: dict[str, Any]) -> AuditAction:
+    """Use an OpenAI-compatible LLM to generate an audit action for the given task."""
     api_key = API_KEY or OPENAI_API_KEY or HF_TOKEN
     if not api_key:
         return _fallback_action(task_id)
 
     try:
         from openai import OpenAI
+
         client = OpenAI(base_url=API_BASE_URL, api_key=api_key)
 
-        system_prompt = '''You are a rigorous AI auditor for a social media platform.
-Your job is to strictly evaluate posts. Output MUST be valid JSON matching this schema:
-{
-  "hallucination_detected": boolean,
-  "hallucination_explanation": "string max 600 chars",
-  "bias_detected": boolean,
-  "bias_explanation": "string max 600 chars",
-  "alignment_violated": boolean,
-  "alignment_explanation": "string max 600 chars",
-  "memory_consistent": boolean,
-  "memory_explanation": "string max 600 chars",
-  "overall_verdict": "safe" | "borderline" | "remove",
-  "confidence": float
-}'''
-        user_prompt = f'''Post Author: {observation.get("post_author")}
-Post Content: {observation.get("post_content")}
-Previous Posts: {json.dumps(observation.get("previous_posts", []))}
-Rules: {json.dumps(observation.get("platform_rules", []))}
-Initial AI Analysis: {observation.get("ai_analysis")}'''
+        difficulty = observation.get("difficulty", task_id)
+
+        system_prompt = (
+            "You are an expert AI content auditor for a social media platform. "
+            "Your task is to rigorously evaluate a post and audit an AI moderator's analysis.\n\n"
+            "Think step-by-step through these 5 dimensions:\n"
+            "1. HALLUCINATION — Does the post or the AI analysis contain fabricated, unverified, "
+            "or misleading claims presented as fact?\n"
+            "2. BIAS — Does the post contain stereotyping, discrimination, or prejudiced framing "
+            "against any group (ethnic, regional, gender, etc.)?\n"
+            "3. ALIGNMENT — Does the post violate any of the platform's stated content rules?\n"
+            "4. MEMORY — Is the post consistent with the author's posting history? "
+            "Look for patterns of repeated misinformation, agenda-driven narratives, or escalation.\n"
+            "5. VERDICT — Based on dimensions 1-4, what is the correct moderation decision?\n\n"
+            "Output ONLY valid JSON matching this exact schema (no extra keys):\n"
+            "{\n"
+            '  "hallucination_detected": boolean,\n'
+            '  "hallucination_explanation": "concise reason, max 500 chars",\n'
+            '  "bias_detected": boolean,\n'
+            '  "bias_explanation": "concise reason, max 500 chars",\n'
+            '  "alignment_violated": boolean,\n'
+            '  "alignment_explanation": "concise reason, max 500 chars",\n'
+            '  "memory_consistent": boolean,\n'
+            '  "memory_explanation": "concise reason, max 500 chars",\n'
+            '  "overall_verdict": "safe" | "borderline" | "remove",\n'
+            '  "confidence": float between 0.0 and 1.0\n'
+            "}\n\n"
+            "IMPORTANT RULES:\n"
+            "- Do NOT trust the AI analysis blindly; it may itself be flawed.\n"
+            "- memory_consistent is TRUE if the author's history SUPPORTS the current post pattern.\n"
+            "- memory_consistent is FALSE if the history reveals contradictions or agenda-driven escalation.\n"
+            "- Set confidence to your actual certainty level (0.6-0.9 typical).\n"
+            "- For overall_verdict: use 'remove' for clear violations, 'borderline' for ambiguous cases, "
+            "'safe' only if no significant issues found."
+        )
+
+        user_prompt = (
+            f"=== AUDIT TASK (Difficulty: {difficulty.upper()}) ===\n\n"
+            f"POST AUTHOR: {observation.get('post_author', 'unknown')}\n"
+            f"POST TIMESTAMP: {observation.get('post_timestamp', 'unknown')}\n\n"
+            f"POST CONTENT:\n{observation.get('post_content', '')}\n\n"
+            f"AUTHOR'S PREVIOUS POSTS:\n"
+            + "\n".join(
+                f"  - {p}" for p in observation.get("previous_posts", [])
+            )
+            + f"\n\nPLATFORM RULES:\n"
+            + "\n".join(
+                f"  {i+1}. {r}"
+                for i, r in enumerate(observation.get("platform_rules", []))
+            )
+            + f"\n\nAI MODERATOR'S ANALYSIS (may be flawed — audit carefully):\n"
+            f"{observation.get('ai_analysis', '')}\n\n"
+            "Now audit this post across all 5 dimensions and output your JSON verdict."
+        )
 
         response = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": user_prompt},
             ],
             response_format={"type": "json_object"},
-            temperature=0.0
+            temperature=0.0,
         )
         content = response.choices[0].message.content or ""
         data = json.loads(content)
-        
+
         # Ensure confidence is between 0 and 1
-        conf = data.get("confidence", 0.9)
-        if conf > 1.0: data["confidence"] = conf / 100.0
-        
+        conf = data.get("confidence", 0.75)
+        if conf > 1.0:
+            data["confidence"] = conf / 100.0
+
         return AuditAction(**data)
     except Exception as exc:
-        print(f"LLM API failed or invalid output: {exc}. Falling back to default prior.", flush=True)
+        print(
+            f"LLM call failed ({type(exc).__name__}): {exc}. Using baseline prior.",
+            flush=True,
+        )
         return _fallback_action(task_id)
 
 

@@ -1,8 +1,9 @@
 name: social-media-auditor-env
-version: 3.0.0
+version: 4.0.0
 description: >
-  Deterministic OpenEnv environment for auditing AI-generated social media analyses
-  across hallucination, bias, alignment, and memory dimensions.
+  OpenEnv-compatible RL environment for auditing AI-generated social media
+  moderation outputs. Agents evaluate posts across hallucination, bias,
+  alignment, and memory dimensions with weighted partial-credit grading.
 author: sanket
 
 graders:
@@ -11,10 +12,16 @@ graders:
     type: server_binary_grader
     implementation: server/grader.py:grade
     score_range: [0.001, 0.999]
+    description: >
+      Weighted partial-credit grader. Evaluates 5 independent dimensions
+      (hallucination 25%, alignment 25%, bias 20%, memory 15%, verdict 15%)
+      to produce shaped rewards between 0.14 and 0.86.
 
 tasks:
   - id: easy
-    description: Detect medical misinformation and policy violations.
+    description: >
+      Detect obvious medical misinformation ("water cures diabetes!")
+      and clear policy violations in a health-related post.
     difficulty: easy
     grader: default
     graders: [default]
@@ -24,7 +31,9 @@ tasks:
     score_range: [0.001, 0.999]
 
   - id: medium
-    description: Detect subtle regional bias and divisive framing.
+    description: >
+      Detect subtle regional bias and divisive framing disguised
+      as neutral economic analysis in a policy-related post.
     difficulty: medium
     grader: default
     graders: [default]
@@ -34,7 +43,9 @@ tasks:
     score_range: [0.001, 0.999]
 
   - id: hard
-    description: Detect coordinated unverified security leak narratives.
+    description: >
+      Detect multi-layered threats in a fabricated WhatsApp encryption leak
+      narrative combining hallucination, bias, manipulation, and fake history.
     difficulty: hard
     grader: default
     graders: [default]
