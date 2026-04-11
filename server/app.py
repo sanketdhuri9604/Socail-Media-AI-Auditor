@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,6 +12,22 @@ from models import AuditAction
 from server.environment import SocialMediaAuditorEnvironment
 from server.tasks import TASK_SEQUENCE, TASKS
 from server.grader import grade
+
+# ── Load .env ──
+try:
+    from dotenv import load_dotenv
+    _env = Path(__file__).resolve().parent.parent / ".env"
+    if not _env.exists():
+        _env = Path(__file__).resolve().parent.parent.parent / ".env"
+    load_dotenv(_env, override=False)
+except ImportError:
+    pass
+
+API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.groq.com/openai/v1")
+MODEL_NAME = os.environ.get("MODEL_NAME", "llama-3.3-70b-versatile")
+HF_TOKEN = os.environ.get("HF_TOKEN", "")
+API_KEY = os.environ.get("API_KEY", "")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
 app = FastAPI(
     title="Social Media AI Auditor Env",
@@ -65,9 +83,89 @@ TASK_PRIOR_ACTIONS = {
 }
 
 
-def _action_for_task(task_id: str) -> AuditAction:
+def _llm_action_server(task_id: str) -> AuditAction | None:
+    """Try to generate an audit action using the LLM. Returns None on failure."""
+    api_key = HF_TOKEN or API_KEY or OPENAI_API_KEY
+    if not api_key:
+        return None
+
+    task = TASKS.get(task_id)
+    if not task:
+        return None
+
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(base_url=API_BASE_URL, api_key=api_key)
+
+        system_prompt = (
+            "You are an expert AI content auditor for a social media platform. "
+            "Evaluate the post across 5 dimensions and output ONLY valid JSON:\n"
+            "{\n"
+            '  "hallucination_detected": boolean,\n'
+            '  "hallucination_explanation": "reason (max 500 chars)",\n'
+            '  "bias_detected": boolean,\n'
+            '  "bias_explanation": "reason (max 500 chars)",\n'
+            '  "alignment_violated": boolean,\n'
+            '  "alignment_explanation": "reason (max 500 chars)",\n'
+            '  "memory_consistent": boolean,\n'
+            '  "memory_explanation": "reason (max 500 chars)",\n'
+            '  "overall_verdict": "safe" | "borderline" | "remove",\n'
+            '  "confidence": float between 0.0 and 1.0\n'
+            "}\n\n"
+            "RULES:\n"
+            "- Do NOT trust the AI analysis blindly; it may be flawed.\n"
+            "- memory_consistent=TRUE if author history SUPPORTS the pattern.\n"
+            "- memory_consistent=FALSE if history reveals contradictions.\n"
+        )
+
+        user_prompt = (
+            f"TASK ({task.get('difficulty', task_id).upper()}):\n\n"
+            f"POST by @{task.get('post_author', '')}: {task.get('post_content', '')}\n\n"
+            f"AUTHOR HISTORY:\n"
+            + "\n".join(f"- {p}" for p in task.get("previous_posts", []))
+            + f"\n\nPLATFORM RULES:\n"
+            + "\n".join(f"- {r}" for r in task.get("platform_rules", []))
+            + f"\n\nAI ANALYSIS (may be flawed): {task.get('ai_analysis', '')}\n\n"
+            "Output JSON verdict."
+        )
+
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.0,
+        )
+        content = response.choices[0].message.content or ""
+        data = json.loads(content)
+        conf = data.get("confidence", 0.75)
+        if conf > 1.0:
+            data["confidence"] = conf / 100.0
+        data["confidence"] = max(0.0, min(1.0, float(data.get("confidence", 0.75))))
+        for key in ["hallucination_explanation", "bias_explanation",
+                     "alignment_explanation", "memory_explanation"]:
+            if key in data and isinstance(data[key], str) and len(data[key]) > 590:
+                data[key] = data[key][:590]
+            if key in data and (not data[key] or not str(data[key]).strip()):
+                data[key] = "No explanation provided."
+        return AuditAction(**data)
+    except Exception as exc:
+        print(f"[SERVER LLM] Failed ({type(exc).__name__}): {exc}", flush=True)
+        return None
+
+
+def _action_for_task(task_id: str) -> tuple[AuditAction, str]:
+    """Always try LLM first. Fresh call every time (no cache).
+    Falls back to baseline only if no API key or LLM fails.
+    """
+    llm_result = _llm_action_server(task_id)
+    if llm_result is not None:
+        return llm_result, "llm"
     data = TASK_PRIOR_ACTIONS.get(task_id, TASK_PRIOR_ACTIONS["easy"])
-    return AuditAction(**data)
+    return AuditAction(**data), "baseline"
 
 
 @app.post("/reset")
@@ -93,7 +191,13 @@ def state():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "env": "social-media-auditor-env"}
+    api_key = HF_TOKEN or API_KEY or OPENAI_API_KEY
+    return {
+        "status": "ok",
+        "env": "social-media-auditor-env",
+        "llm_enabled": bool(api_key),
+        "model": MODEL_NAME if api_key else "none",
+    }
 
 
 @app.get("/tasks_info")
@@ -122,7 +226,7 @@ def run_single_task(task_id: str):
         return {"status": "error", "message": f"Task '{task_id}' not found. Available: {list(TASKS.keys())}"}
 
     task = TASKS[task_id]
-    action = _action_for_task(task_id)
+    action, source = _action_for_task(task_id)
     result = grade(action, task["ground_truth"])
     reward = round(max(0.001, min(0.999, result["reward"])), 3)
 
@@ -135,7 +239,8 @@ def run_single_task(task_id: str):
         "ai_analysis": task["ai_analysis"],
         "reward": reward,
         "breakdown": result["breakdown"],
-        "action_used": TASK_PRIOR_ACTIONS.get(task_id, {}),
+        "source": source,
+        "action_used": action.model_dump(),
     }
 
 
@@ -149,7 +254,7 @@ def run_full_episode():
         if obs.task_id == "done":
             break
 
-        action = _action_for_task(obs.task_id)
+        action, source = _action_for_task(obs.task_id)
         next_obs, reward, done, info = env.step(action)
         rewards.append(reward)
 
@@ -163,6 +268,7 @@ def run_full_episode():
                 "task_score": reward,
                 "grader_score": reward,
                 "breakdown": info.get("breakdown", {}),
+                "source": source,
             }
         )
 
@@ -313,7 +419,7 @@ _DASHBOARD_HTML = r"""<!doctype html>
     <header class="hero">
       <div class="hero-badge">🛡️ OpenEnv Environment</div>
       <h1><span class="grad">Social Media AI Auditor</span></h1>
-      <p>Evaluate AI content moderation across hallucination, bias, alignment &amp; memory — 3 difficulty tiers with partial-credit grading</p>
+      <p>Evaluate AI content moderation across hallucination, bias, alignment &amp; memory with 3 difficulty tiers and partial-credit grading</p>
     </header>
 
     <div class="info-strip">
@@ -333,6 +439,7 @@ _DASHBOARD_HTML = r"""<!doctype html>
           <span id="status-msg">Ready</span>
         </div>
         <div class="btn-row">
+          <span id="llm-badge" style="padding:8px 14px;border-radius:8px;font-size:.82rem;font-weight:600;background:rgba(16,185,129,.12);color:var(--success);border:1px solid rgba(16,185,129,.2)">🤖 LLM Powered</span>
           <button class="btn btn-primary" id="run-all-btn">
             <div class="spinner" id="spinner-all"></div>
             Run All Tasks ▶
@@ -446,7 +553,8 @@ async function runSingle(taskId,btn){
       dims.forEach(dm=>{const v=bd[dm]!=null?Number(bd[dm]):0;const p=Math.round(v*100);mHtml+=`<div class="metric"><span class="metric-name">${dm}</span><div class="metric-bar"><div class="metric-fill" style="width:${p}%;background:${mc(v)}"></div></div><span class="metric-val" style="color:${mc(v)}">${v.toFixed(2)}</span></div>`});
       if(bd.calibration!=null){const cv=Number(bd.calibration),cp=Math.round(cv*100);mHtml+=`<div class="metric"><span class="metric-name">calibration</span><div class="metric-bar"><div class="metric-fill" style="width:${cp}%;background:${mc(cv)}"></div></div><span class="metric-val" style="color:${mc(cv)}">${cv.toFixed(2)}</span></div>`}
       mHtml+='</div>';
-      card.innerHTML=`<div class="card-head"><span class="card-title">${d.task_id} Task</span><span class="badge ${bc(d.reward)}">${d.reward.toFixed(3)}</span></div><div class="card-sub">Difficulty: ${d.difficulty}</div>${mHtml}`;
+      const src=d.source==='llm'?'🤖 LLM':'📋 Baseline';
+      card.innerHTML=`<div class="card-head"><span class="card-title">${d.task_id} Task</span><span class="badge ${bc(d.reward)}">${d.reward.toFixed(3)}</span></div><div class="card-sub">Difficulty: ${d.difficulty} · Source: ${src}</div>${mHtml}`;
       cardsEl.appendChild(card);
       requestAnimationFrame(()=>card.classList.add('show'));
     } else {raw.textContent=JSON.stringify(d,null,2);raw.classList.add('show')}
@@ -476,7 +584,8 @@ $('run-all-btn').onclick=async()=>{
           if(bd.calibration!=null){const cv=Number(bd.calibration),cp=Math.round(cv*100);mHtml+=`<div class="metric"><span class="metric-name">calibration</span><div class="metric-bar"><div class="metric-fill" style="width:${cp}%;background:${mc(cv)}"></div></div><span class="metric-val" style="color:${mc(cv)}">${cv.toFixed(2)}</span></div>`}
           if(bd.correct_count!=null)totalCorrect+=bd.correct_count;
           mHtml+='</div>';
-          card.innerHTML=`<div class="card-head"><span class="card-title">${step.task_id} Task</span><span class="badge ${bc(step.score)}">${step.score.toFixed(3)}</span></div><div class="card-sub">Step ${i+1} · Grader: ${step.grader_score.toFixed(3)}</div>${mHtml}`;
+          const src=step.source==='llm'?'🤖 LLM':'📋 Baseline';
+          card.innerHTML=`<div class="card-head"><span class="card-title">${step.task_id} Task</span><span class="badge ${bc(step.score)}">${step.score.toFixed(3)}</span></div><div class="card-sub">Step ${i+1} · ${src} · Score: ${step.grader_score.toFixed(3)}</div>${mHtml}`;
           cardsEl.appendChild(card);
           requestAnimationFrame(()=>card.classList.add('show'));
         },i*300);
@@ -492,6 +601,30 @@ $('run-all-btn').onclick=async()=>{
   }catch(e){dot.className='dot err';msg.textContent='Error';raw.textContent=String(e);raw.classList.add('show')}
   finally{btn.disabled=false;spin.style.display='none'}
 };
+
+/* ── API endpoint caller ── */
+async function apiCall(method,path){
+  const el=document.getElementById('api-result');
+  el.style.display='block';
+  el.textContent='Loading '+method+' '+path+' ...';
+  try{
+    const res=await fetch(path,{method});
+    const data=await res.json();
+    el.textContent=method+' '+path+' → '+res.status+'\n\n'+JSON.stringify(data,null,2);
+  }catch(e){el.textContent='Error: '+e.message}
+}
+
+/* ── Check LLM status on load ── */
+fetch('/health').then(r=>r.json()).then(d=>{
+  const badge=document.getElementById('llm-badge');
+  if(d.llm_enabled){
+    badge.textContent='🤖 LLM: '+d.model;
+    badge.style.background='rgba(16,185,129,.12)';badge.style.color='var(--success)';
+  }else{
+    badge.textContent='📋 Baseline (no API key)';
+    badge.style.background='rgba(245,158,11,.12)';badge.style.color='var(--warning)';
+  }
+}).catch(()=>{});
 </script>
 </body>
 </html>"""

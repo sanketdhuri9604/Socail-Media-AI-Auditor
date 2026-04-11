@@ -6,7 +6,7 @@ ALLOWED_VERDICTS = {"safe", "borderline", "remove"}
 
 
 class AuditAction(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     hallucination_detected: bool
     hallucination_explanation: str = Field(min_length=1, max_length=600)

@@ -33,7 +33,7 @@ ENV_BASE_URL = os.environ.get("ENV_BASE_URL", "http://localhost:7860")
 ENV_RESET_MAX_ATTEMPTS = int(os.environ.get("ENV_RESET_MAX_ATTEMPTS", "6"))
 ENV_RESET_RETRY_GAP = float(os.environ.get("ENV_RESET_RETRY_GAP", "2"))
 STEP_DELAY = float(os.environ.get("STEP_DELAY", "0.5"))
-MINIMAL_END_PAYLOAD = os.environ.get("MINIMAL_END_PAYLOAD", "1") == "1"
+MINIMAL_END_PAYLOAD = os.environ.get("MINIMAL_END_PAYLOAD", "") == "1"
 
 DEFAULT_GRADER_NAME = "default"
 EXPECTED_TASKS = [task_id for task_id in TASK_SEQUENCE if task_id in TASKS]
@@ -240,10 +240,19 @@ def _llm_action(task_id: str, observation: dict[str, Any]) -> AuditAction:
         content = response.choices[0].message.content or ""
         data = json.loads(content)
 
-        # Ensure confidence is between 0 and 1
+        # Sanitize LLM output before Pydantic validation
         conf = data.get("confidence", 0.75)
         if conf > 1.0:
             data["confidence"] = conf / 100.0
+        data["confidence"] = max(0.0, min(1.0, float(data.get("confidence", 0.75))))
+
+        # Truncate explanations to fit max_length=600
+        for key in ["hallucination_explanation", "bias_explanation",
+                     "alignment_explanation", "memory_explanation"]:
+            if key in data and isinstance(data[key], str) and len(data[key]) > 590:
+                data[key] = data[key][:590]
+            if key in data and (not data[key] or not str(data[key]).strip()):
+                data[key] = "No explanation provided."
 
         return AuditAction(**data)
     except Exception as exc:

@@ -153,7 +153,7 @@ def grade(action: AuditAction, ground_truth: dict) -> dict:
     reward = round(max(0.001, min(0.999, reward)), 3)
 
     breakdown["calibration"] = calibration
-    breakdown["overconfidence_penalty"] = round(max(0.001, 1.0 - penalty), 3)
+    breakdown["overconfidence_penalty"] = round(min(0.999, max(0.001, 1.0 - penalty)), 3)
     breakdown["total"] = reward
 
     return {"reward": reward, "breakdown": breakdown}
