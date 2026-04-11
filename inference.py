@@ -85,8 +85,8 @@ def _score(value: Any) -> float:
     try:
         numeric = float(value)
     except (TypeError, ValueError):
-        numeric = 0.001
-    return round(max(0.001, min(0.999, numeric)), 3)
+        numeric = 0.01
+    return round(max(0.01, min(0.99, numeric)), 3)
 
 
 def _normalize_total(total_reward: float, max_steps: int) -> float:

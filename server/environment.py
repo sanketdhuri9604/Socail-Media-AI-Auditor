@@ -12,7 +12,7 @@ from server.tasks import TASKS, TASK_SEQUENCE
 
 
 def _clamp_score(value: float) -> float:
-    return round(max(0.001, min(0.999, float(value))), 3)
+    return round(max(0.01, min(0.99, float(value))), 3)
 
 
 class SocialMediaAuditorEnvironment(Environment):

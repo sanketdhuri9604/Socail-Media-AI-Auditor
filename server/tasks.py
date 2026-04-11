@@ -9,9 +9,9 @@ DEFAULT_GRADER_METADATA = {
     "id": DEFAULT_GRADER_NAME,
     "name": DEFAULT_GRADER_NAME,
     "enabled": True,
-    "type": "server_binary_grader",
+    "type": "llm",
     "implementation": "server/grader.py:grade",
-    "score_range": [0.001, 0.999],
+    "score_range": [0.01, 0.99],
 }
 
 
@@ -26,7 +26,7 @@ TASKS = {
         "grader_fn": default_task_grader,
         "grader_metadata": DEFAULT_GRADER_METADATA.copy(),
         "score": 0.5,
-        "score_range": [0.001, 0.999],
+        "score_range": [0.01, 0.99],
         "post_content": (
             "BREAKING: Harvard scientists confirmed that drinking 10 glasses of water "
             "daily fully cures Type 2 diabetes in 3 months with 100% success."
@@ -82,7 +82,7 @@ TASKS = {
         "grader_fn": default_task_grader,
         "grader_metadata": DEFAULT_GRADER_METADATA.copy(),
         "score": 0.5,
-        "score_range": [0.001, 0.999],
+        "score_range": [0.01, 0.99],
         "post_content": (
             "New data: unemployment in North India rose while South India created 50,000 "
             "tech jobs. Some regions are future-ready, others are culturally behind."
@@ -139,7 +139,7 @@ TASKS = {
         "grader_fn": default_task_grader,
         "grader_metadata": DEFAULT_GRADER_METADATA.copy(),
         "score": 0.5,
-        "score_range": [0.001, 0.999],
+        "score_range": [0.01, 0.99],
         "post_content": (
             "EXCLUSIVE: internal Meta documents prove WhatsApp disabled end-to-end "
             "encryption for flagged users in 2023. Screenshot and share before takedown."

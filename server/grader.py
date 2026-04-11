@@ -136,12 +136,12 @@ def grade(action: AuditAction, ground_truth: dict) -> dict:
             dim_reward = weights["bool"] * bool_score
 
         reward += dim_reward
-        breakdown[dim] = round(max(0.001, min(0.999, dim_reward / (weights["bool"] + weights["expl"]) if (weights["bool"] + weights["expl"]) > 0 else 0.5)), 3)
+        breakdown[dim] = round(max(0.01, min(0.99, dim_reward / (weights["bool"] + weights["expl"]) if (weights["bool"] + weights["expl"]) > 0 else 0.5)), 3)
 
     # ── Confidence calibration ──
     accuracy_ratio = correct_count / len(checks)
     confidence_gap = abs(action.confidence - accuracy_ratio)
-    calibration = round(max(0.001, min(0.999, 1.0 - confidence_gap)), 3)
+    calibration = round(max(0.01, min(0.99, 1.0 - confidence_gap)), 3)
 
     # ── Overconfidence penalty ──
     penalty = 0.0
@@ -150,10 +150,10 @@ def grade(action: AuditAction, ground_truth: dict) -> dict:
         reward -= penalty
 
     # ── Clamp to strict open interval (0, 1) ──
-    reward = round(max(0.001, min(0.999, reward)), 3)
+    reward = round(max(0.01, min(0.99, reward)), 3)
 
     breakdown["calibration"] = calibration
-    breakdown["overconfidence_penalty"] = round(min(0.999, max(0.001, 1.0 - penalty)), 3)
+    breakdown["overconfidence_penalty"] = round(min(0.99, max(0.01, 1.0 - penalty)), 3)
     breakdown["total"] = reward
 
     return {"reward": reward, "breakdown": breakdown}
