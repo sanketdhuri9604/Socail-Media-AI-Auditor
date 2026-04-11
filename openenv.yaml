@@ -8,52 +8,28 @@ author: sanket
 
 tasks:
   - id: easy
+    name: Easy Medical Misinformation
     description: >
       Detect obvious medical misinformation and clear policy violations
       in a health-related post claiming water cures diabetes.
     difficulty: easy
-    grader:
-      type: llm
-      prompt_template: >
-        You are grading a social media content audit task. The agent was asked
-        to detect hallucination, bias, alignment violations, and memory
-        consistency in a health misinformation post. Score the agent's
-        response from 0.0 to 1.0 based on correctness across all 5
-        dimensions: hallucination detection, bias detection, alignment
-        violation detection, memory consistency analysis, and overall verdict.
-        Return ONLY a JSON object with a single key "score" and a float value.
+    grader: "server.grader:grade"
 
   - id: medium
+    name: Medium Regional Bias
     description: >
       Detect subtle regional bias and divisive framing disguised as
       neutral economic analysis in a policy-related post.
     difficulty: medium
-    grader:
-      type: llm
-      prompt_template: >
-        You are grading a social media content audit task. The agent was asked
-        to detect hallucination, bias, alignment violations, and memory
-        consistency in a regionally biased economic post. Score the agent's
-        response from 0.0 to 1.0 based on correctness across all 5
-        dimensions: hallucination detection, bias detection, alignment
-        violation detection, memory consistency analysis, and overall verdict.
-        Return ONLY a JSON object with a single key "score" and a float value.
+    grader: "server.grader:grade"
 
   - id: hard
+    name: Hard Fabricated Leak
     description: >
       Detect multi-layered threats in a fabricated WhatsApp encryption leak
       narrative combining hallucination, bias, manipulation, and fake history.
     difficulty: hard
-    grader:
-      type: llm
-      prompt_template: >
-        You are grading a social media content audit task. The agent was asked
-        to detect hallucination, bias, alignment violations, and memory
-        consistency in a fabricated tech leak post. Score the agent's
-        response from 0.0 to 1.0 based on correctness across all 5
-        dimensions: hallucination detection, bias detection, alignment
-        violation detection, memory consistency analysis, and overall verdict.
-        Return ONLY a JSON object with a single key "score" and a float value.
+    grader: "server.grader:grade"
 
 action_space:
   type: object
