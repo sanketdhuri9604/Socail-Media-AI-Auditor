@@ -324,14 +324,7 @@ _DASHBOARD_HTML = r"""<!doctype html>
       <div class="info-chip"><div class="label">Spec</div><div class="value">OpenEnv</div></div>
     </div>
 
-    <!-- ═══════ TASK BROWSER PANEL ═══════ -->
-    <div class="panel" id="task-panel">
-      <div class="panel-title"><span class="icon">📋</span> Task Browser</div>
-      <div class="tabs" id="task-tabs"></div>
-      <div id="task-previews"></div>
-    </div>
-
-    <!-- ═══════ EVALUATION PANEL ═══════ -->
+    <!-- ═══════ EVALUATION PANEL (first) ═══════ -->
     <div class="panel">
       <div class="panel-title"><span class="icon">⚡</span> Evaluation</div>
       <div class="controls">
@@ -355,6 +348,13 @@ _DASHBOARD_HTML = r"""<!doctype html>
         <div class="sum-item"><div class="sum-val" id="s-status">—</div><div class="sum-label">Status</div></div>
       </div>
       <pre id="raw"></pre>
+    </div>
+
+    <!-- ═══════ TASK BROWSER PANEL (second) ═══════ -->
+    <div class="panel" id="task-panel">
+      <div class="panel-title"><span class="icon">📋</span> Task Browser</div>
+      <div class="tabs" id="task-tabs"></div>
+      <div id="task-previews"></div>
     </div>
 
     <div class="footer">

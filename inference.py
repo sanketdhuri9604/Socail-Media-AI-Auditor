@@ -3,7 +3,19 @@ from __future__ import annotations
 import json
 import os
 import time
+from pathlib import Path
 from typing import Any
+
+# Load .env file if present (checks current dir AND parent dirs)
+try:
+    from dotenv import load_dotenv
+    # Check project dir, then parent dir
+    env_path = Path(__file__).resolve().parent / ".env"
+    if not env_path.exists():
+        env_path = Path(__file__).resolve().parent.parent / ".env"
+    load_dotenv(env_path, override=False)
+except ImportError:
+    pass  # dotenv not installed — rely on system env vars
 
 import requests
 
